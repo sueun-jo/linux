@@ -7,8 +7,8 @@
 #include <signal.h> //사용자 정의 signal
 #include <stdio.h>
 
-#define MAX_ROOM 10
-#define MAX_CLIENT 20
+#define MAX_ROOM 10 //방은 최대 10개
+#define MAX_CLIENT 20 //최대 client 수는 20명
 #define MAX_NAME_LEN 50
 #define BUFSIZE 1024
 
@@ -23,17 +23,18 @@
 /* 유저 정보 구조체 */
 typedef struct {
     char nickname[MAX_NAME_LEN]; // 중복 불가
-    int rid = -1; // -1이면 미참여, 0~9 사이의 방 번호 존재
+    int rid;//room_id (0~9)
     pid_t pid; //자식 프로세스 pid
     int pipe_to_child[2]; // 부모->자식 : 부모는 write, 자식은 read
     int pipe_to_parent[2]; // 자식->부모 : 자식이 write, 부모는 read
-
+    int client_socket_fd; // client socket fd : child mainly uses
+    int is_activated; // 1이면 사용 중
 } UserInfo;
 
 /* 방 정보 구조체 */
 typedef struct {
-    int rid = -1;
-    int mem_cnt = 0; //현재 참여 중인 member 수
+    int rid;
+    int mem_cnt; //현재 참여 중인 member 수
     pid_t mem_pids[MAX_CLIENT]; //현재 참여 중인 member들의 자식 pid 
 } RoomInfo;
 
