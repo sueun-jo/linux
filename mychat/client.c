@@ -7,6 +7,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/wait.h>
+#include "debug.h"
 
 #define SERVER_PORT 5432
 #define BUFSIZE 1024
@@ -90,6 +91,7 @@ int main (int argc, char **argv){
             if (len <= 0) break;
             recv_buf[len] = '\0';
             // 읽은 내용 출력 예정 printf(); 추후 수정
+            printf("[server]: %s", recv_buf);
 
         }
         

@@ -16,10 +16,6 @@
 #define PIPE_READ 0 
 #define PIPE_WRITE 1
 
-/* 사용자 정의 시그널 */
-#define SIGUSR1_PARENT_NOTIFY SIGUSR1 // 자식-> 부모 메시지 도착
-#define SIGUSR2_CHILD_NOTIFY SIGUSR2 // 부모 -> 자식 메시지 있음
-
 /* 유저 정보 구조체 */
 typedef struct {
     char nickname[MAX_NAME_LEN]; // 중복 불가
