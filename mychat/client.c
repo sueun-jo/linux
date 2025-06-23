@@ -24,10 +24,11 @@ void handle_child (int sig){  //SIGCHLD 시그널 발생 시 시그널 핸들러
 }
 
 int main (int argc, char **argv){
-
-    int sock; //socket
+    
+    int my_socket; //socket
     struct sockaddr_in server_addr;
-    char buf[BUFSIZE];
+    char send_buf[BUFSIZE] = {0}; // 부모에서 server로 send 할 내용
+    char recv_buf[BUFSIZE] = {0}; // 자식이 server로부터 recv 내용
     pid_t pid;
 
     /* 시그널 등록 */
@@ -40,8 +41,8 @@ int main (int argc, char **argv){
     }
 
     /* socket 생성 */
-    if ( (sock = socket (AF_INET, SOCK_STREAM, 0) ) < 0 ) {
-        perror ("socket error");
+    if ( (my_socket = socket(AF_INET, SOCK_STREAM, 0)) < 0 ) {
+        perror ("socket error : ");
         return 1;
     }
 
@@ -52,8 +53,8 @@ int main (int argc, char **argv){
     inet_pton(AF_INET, argv[1], &server_addr.sin_addr);
 
     /* 서버에 connect 요청 */
-    if ( connect (sock, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0){
-        perror ("connect error");
+    if ( connect (my_socket, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0){
+        perror ("connect error : ");
         return 1;
     }
     
@@ -63,27 +64,32 @@ int main (int argc, char **argv){
     pid = fork();
 
     /* 부모 프로세스와 자식 프로세스는 따로, 동시에 돌아간다 */
+
     if (pid > 0){  //부모 프로세스 : 사용자 입력 -> 서버 전송
         while (1){
-            fgets(buf, BUFSIZE, stdin);
+            fgets(send_buf, BUFSIZE, stdin);
 
-            if (strncmp(buf, "/quit", 5) == 0) { // 사용자가 /quit 입력 시
+            if (strncmp(send_buf, "/quit", 5) == 0) { // 사용자가 /quit 입력 시
+                send(my_socket, send_buf, strlen(send_buf), 0); // 서버에도 알려주고
                 kill (pid, SIGTERM); // 자식한테 죽으라고 함
-                waitpid (pid, NULL, 0); //죽은 자식 자원 회수
+                waitpid (pid, NULL, 0); //죽은 자식 자원 회수 : 좀비 방지
                 break;
             }
 
-            send (sock, buf, strlen(buf), 0); //write 대신 socket 통신의 send
+            if ((send (my_socket, send_buf, strlen(send_buf), 0)) <= 0){ //socket 통신의 send : write 대신
+                perror ("send error :"); 
+                return -1;
+            }
         }
     }
 
     else if (pid == 0){ //자식 프로세스 : 서버로부터 recv() -> 화면 출력
         while (1){
 
-            int len = read (sock, buf, BUFSIZE-1 );
+            int len = recv (my_socket, recv_buf, BUFSIZE-1, 0);
             if (len <= 0) break;
-            buf[len] = '\0';
-            printf("[SERVER] : %s", buf);
+            recv_buf[len] = '\0';
+            // 읽은 내용 출력 예정 printf(); 추후 수정
 
         }
         
@@ -92,8 +98,8 @@ int main (int argc, char **argv){
 
     /* shutdown 종료 선언 : 더 이상 송신하지(write) 않겠다고 알려줌 
     server쪽에서 읽으면 EOF(0리턴)을 받아서 클라이언트가 종료됐다고 알려주는 역할임 */
-    shutdown (sock, SHUT_WR);
-    close (sock);
+    shutdown (my_socket, SHUT_WR);
+    close (my_socket);
 
     return 0; 
 }
