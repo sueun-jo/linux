@@ -15,45 +15,51 @@
 #define BUFSIZE 1024
 
 
-UserInfo users[MAX_CLIENT]; //user 배열
 RoomInfo rooms[MAX_ROOM]; //room 배열
+
+int from_child_to_parent[2];
+int from_parent_to_child[2];
 
 /* zombie 방지 시그널 핸들러 */
 void handle_child (int sig){
     int status;
     pid_t pid;
-    while (waitpid(-1, &status, WNOHANG) > 0){
-        int idx = find_user_idx_by_pid(pid);
-        if (idx != -1){
-            users[idx].is_activated = 0;
-            dprint("[server Info] Released slot for PID %d", pid);
-        }
+    while (waitpid(-1, &status, WNOHANG) > 0){ //자원 회수
+        // // int idx = find_user_idx_by_pid(pid); // 여기 뭔가 이상하다 다시봐야될듯?
+        // if (idx != -1){
+        //     users[idx].is_activated = 0;
+        //     dprint("Released slot for PID %d", pid);
+        // }
     }
 }
 
-void sig_usr1(int signo){
-    
+void sig_usr1(int sig){ //부모는 자식이 쓴 거 읽어서 다시 자식server에 write 해줘야함
+    char buf[BUFSIZE];
+    memset (buf, 0, BUFSIZE);
+    int n = read (from_child_to_parent[PIPE_READ], buf, BUFSIZE-1);
+    if (n<=0){
+        eprint("read error : nothing to read");
+    }
+    else{ //읽을 게 있으면
+        buf[n] = '\0';
+        write (from_parent_to_child[PIPE_WRITE], buf, strlen(buf));
+        
+       // kill (users[user_idx].pid, SIGUSR2); // <- 이부분이 지금 자식pid를 찾아야되는데 이거 어떻게 처리하지?
+    }
 }
 
-/* 사용하지 않는 user slot 찾기 */
-int find_emtpy_user_slot(){
-    for (int i=1; i<MAX_CLIENT+1; i++){
-        if (!users[i-1].is_activated) return i;
-    }
-    return -1;
+void sig_usr2(int sig){
+
 }
 
 int main (int argc, char **argv){
- 
     int listen_socket, client_socket; //listen_socket은 연결대기용, client_socket은 client와 통신용
     struct sockaddr_in server_addr, client_addr;
     socklen_t addrlen = sizeof(client_addr);
+
     char buf [BUFSIZE];
     pid_t pid;
     
-
-    signal (SIGCHLD, handle_child); //자식 죽으면 handle_child로 자원회수하겠다는 소리
-
     listen_socket = socket (AF_INET, SOCK_STREAM, 0); //tcp socket 통신 할게요
     if (listen_socket < 0){
         perror ("socket error : ");
@@ -76,11 +82,10 @@ int main (int argc, char **argv){
     printf("[Server Info] Server is Listening on Port : %d ... \n", SERVER_PORT);
     
     while (1) {
-    
         /* accept : 클라이언트가 요청해서 생긴 socket이기에 client_socket이라 명명 */
         /* accept하면 서버:클라이언트 1:1 관계를 만들어야 하니까 fork() 해야됨 */
         client_socket = accept (listen_socket, (struct sockaddr*)&client_addr, &addrlen);
-        if (client_socket < 0){                   
+        if (client_socket < 0){       
             perror ("accept error : ");
             continue;
         }
@@ -94,15 +99,13 @@ int main (int argc, char **argv){
         }
         
         //pipe 생성
-        int from_child_to_parent[2];
-        int from_parent_to_child[2];
         pipe (from_child_to_parent); // 자식 -> 부모 : 자식 write, 부모 read
         pipe (from_parent_to_child); // 부모 -> 자식 : 부모 write, 자식 read
 
         pid = fork(); // 부모 - 자식 나눠짐
 
         if (pid == 0){ //자식 프로세스
-            signal (SIGUSR1, sig_usr1); //signal등록 : child to parent : usr1
+            signal (SIGUSR2, sig_usr2); //signal등록 parent가 child한테 너 읽어야된다고 알려줌
             close (listen_socket); //자식은 listen_socket 필요 없음 : accept은 부모만 한다
     
             //자식은 부모한테 write만 하면 됨, read 필요 없음
@@ -122,28 +125,25 @@ int main (int argc, char **argv){
                     kill (getppid(), SIGUSR1); //쓰고 나서 SIGUSR1 발생시키고 sig_usr1 수행 
                 }
             }
-            
-           
             exit(0);
         }
 
         else if (pid > 0){ // 부모 프로세스
-
-            //부모는 자식한테 write만 하면 됨, read 필요 없음
-            close (from_parent_to_child[PIPE_READ]);
-            //부모는 자식으로부터 read만 하면 됨, write 필요 없음
-            close (from_child_to_parent[PIPE_WRITE]); 
-
+            signal (SIGCHLD, handle_child);
+            signal (SIGUSR1, sig_usr1); //자식이 부모한테 쓰고 알려줄거임 : sig_usr1 수행하는 건 부모쪽
+            close (from_parent_to_child[PIPE_READ]); //부모는 자식한테 write, read필요 없음
+            close (from_child_to_parent[PIPE_WRITE]); //부모는 자식으로부터 read only, write 필요 X
+       
+            /* UserInfo 구조체 users setter */
             users[user_idx].pid = pid; 
-            users[user_idx].rid = -1; //rid -1로 초기화
             users[user_idx].client_socket_fd = client_socket;
             users[user_idx].from_parent_to_child[PIPE_WRITE] = from_parent_to_child[PIPE_WRITE];
             users[user_idx].from_child_to_parent[PIPE_READ] = from_child_to_parent[PIPE_READ];
-            users[user_idx].is_activated = 1;
+            users[user_idx].is_activated = 1; 
+            users[user_idx].rid = -1; //rid -1로 초기화
             
             printf("[INFO] New Client [# %d] is Connected.\n", user_idx);
-            dprint("PID : %d, idx : %d", pid, user_idx);
-            run_parent_handler();
+            dprint("PID : %d, idx : %d", users[user_idx].pid, user_idx);
             
         }
         else {

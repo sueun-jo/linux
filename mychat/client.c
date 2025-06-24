@@ -8,11 +8,13 @@
 #include <sys/socket.h>
 #include <sys/wait.h>
 #include "debug.h"
+#include "resource.h"
 
 #define SERVER_PORT 5432
 #define BUFSIZE 1024
 
 static int my_socket, client_pipe[2];
+char nicknames[MAX_CLIENT][MAX_NAME_LEN]; //char nicknames[20][50];
 
 /* 시그널 핸들러 모음*/
 void handle_exit (int sig){ //종료할 때의 시그널 핸들러
@@ -29,12 +31,12 @@ void handle_child (int sig){  //SIGCHLD 시그널 발생 시 시그널 핸들러
 void sig_usr1 (int sig){ //자식->부모한테 쓰고 알리는 시그널 :  부모는 읽어야 됨
     char buf[BUFSIZE];
     memset (buf, 0, BUFSIZE);
-    int n =  read (client_pipe[0], buf, BUFSIZE); 
+    int n =  read (client_pipe[0], buf, BUFSIZE-1); 
     if (n<=0) {
         dprint("read erorr");
     }
     else { //읽었으면
-        buf[n] = '\0'; //문자열 처리
+        buf[n] = '\0'; //문자열 처리 : 개행 제거
         send(my_socket, buf, strlen(buf), 0); // 읽은 내용을 서버로 보내기
         dprint("send by usr1");
     }
@@ -68,7 +70,7 @@ int main (int argc, char **argv){
     inet_pton(AF_INET, argv[1], &server_addr.sin_addr);
     
     /* 서버에 connect 요청 */
-    if ( connect (my_socket, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0){
+    if (connect (my_socket, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0){
         perror ("connect error : ");
         return 1;
     }
@@ -83,13 +85,36 @@ int main (int argc, char **argv){
     /* 부모 프로세스와 자식 프로세스는 따로, 동시에 돌아간다 */
     if (pid < 0) perror ("fork error: ");
 
-    else if (pid == 0){  //자식 프로세스 : 사용자 입력 -> 서버 전송
+    else if (pid == 0){  //자식 프로세스 : 사용자 입력 -> 부모 클라로 보냄
         close (client_pipe[0]); //read안할거니까 닫음
-        signal (SIGUSR1, sig_usr1); //시그널 등록 
+        signal (SIGUSR1, sig_usr1); //시그널 등록
+
+        int user_idx;
+        do {
+            user_idx = find_emtpy_user_slot();
+            printf("Hello World! Input your nickname : ");
+            char nickname[MAX_NAME_LEN];
+            memset (nickname, 0, BUFSIZE);
+            
+            int  n = read (0, nickname, MAX_NAME_LEN-1); //키보드로 닉네임 입력받음 : 49바이트까지 읽겠다
+            if (n>0){
+                nickname[n-1] = '\0'; //문자열 끝 처리 (개행문자 제거)
+                strcpy (nicknames[user_idx], nickname); //복사해서 집어넣음
+            }
+            else {
+                perror ("read error");
+                eprint("nothing to read");
+            }
+        } while(!nicknames[user_idx]); //닉네임 있으면 반복X
+
         while (1){
             memset (send_buf, 0, BUFSIZE); // 초기화
+            char msg_with_nick[BUFSIZE];
+            memset(msg_with_nick, 0, BUFSIZE); //초기화
             fgets(send_buf, BUFSIZE, stdin); //send_buf에 입력받음, blocking function
-            write(client_pipe[1], send_buf, strlen(send_buf));
+
+            snprintf(msg_with_nick, BUFSIZE, "[%s] %s", nicknames[user_idx], send_buf);
+            write(client_pipe[1], msg_with_nick, strlen(msg_with_nick));
             kill (getppid(), SIGUSR1); //부모한테 signal 보냄
         }
     }
@@ -111,8 +136,10 @@ int main (int argc, char **argv){
                 eprint("읽을 게 없음");
                 break;
             }
+            else { // n>0
             recv_buf[n] = '\0';
             printf("[server echo]: %s", recv_buf);
+            }
         }
         
         kill(pid, SIGTERM); //자식 죽으라고 함

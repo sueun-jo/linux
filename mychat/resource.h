@@ -21,17 +21,21 @@ typedef struct {
     char nickname[MAX_NAME_LEN]; // 중복 불가
     int rid;//room_id (0~9)
     pid_t pid; //자식 프로세스 pid
-    int pipe_to_child[2]; // 부모->자식 : 부모는 write, 자식은 read
-    int pipe_to_parent[2]; // 자식->부모 : 자식이 write, 부모는 read
+    int from_parent_to_child[2]; // 부모->자식 : 부모는 write, 자식은 read
+    int from_child_to_parent[2]; // 자식->부모 : 자식이 write, 부모는 read
     int client_socket_fd; // client socket fd : child mainly uses
     int is_activated; // 1이면 사용 중
 } UserInfo;
 
 /* 방 정보 구조체 */
-typedef struct {
+typedef struct { 
     int rid;
     int mem_cnt; //현재 참여 중인 member 수
     pid_t mem_pids[MAX_CLIENT]; //현재 참여 중인 member들의 자식 pid 
 } RoomInfo;
+
+
+extern UserInfo users[MAX_CLIENT]; //전역 변수 선언
+int find_emtpy_user_slot();
 
 #endif
