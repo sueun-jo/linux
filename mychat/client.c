@@ -111,6 +111,7 @@ int main (int argc, char **argv){
                 nickname[n-1] = '\0'; //문자열 끝 처리 (개행문자 제거)
                 strcpy (nicknames[user_idx], nickname); //복사해서 집어넣음
                 dprint("nicknames[user_idx] = %s\n", nicknames[user_idx]);
+                printf("H")
                 break; //닉네임 입력받고 집어 넣었으면 빠져나감
             }
             else {
@@ -119,6 +120,7 @@ int main (int argc, char **argv){
             }
         }
 
+        
         while (1){ 
             memset (send_buf, 0, BUFSIZE); // 초기화
             char msg_with_nick[BUFSIZE];
