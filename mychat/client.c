@@ -14,7 +14,7 @@
 #define BUFSIZE 1024
 
 static int my_socket, client_pipe[2];
-char nicknames[MAX_CLIENT][MAX_NAME_LEN]; //char nicknames[20][50];
+char nicknames[MAX_CLIENT][MAX_NAME_LEN] = {0}; //char nicknames[20][50];
 
 /* 시그널 핸들러 모음*/
 void handle_exit (int sig){ //종료할 때의 시그널 핸들러
@@ -40,6 +40,13 @@ void sig_usr1 (int sig){ //자식->부모한테 쓰고 알리는 시그널 :  �
         send(my_socket, buf, strlen(buf), 0); // 읽은 내용을 서버로 보내기
         dprint("send by usr1");
     }
+}
+
+int assign_user_idx(){
+    for (int i=0; i<MAX_CLIENT; i++){
+        if (nicknames[i][0]=='\0') return i; // 비어있으면 return i
+    }
+    return -1; //빈 자리 없으면
 }
 
 int main (int argc, char **argv){
@@ -80,40 +87,46 @@ int main (int argc, char **argv){
 
     pipe(client_pipe);//cleint_pipe는 자식->부모로 쓰기만 할거임
         
-    pid = fork(); // fork로 부모 - 자식 분기, 자식: input-> pipe로 부모한테 내용 전달 / 부모 : read pipe, interact server
+    pid = fork(); // fork로 부모 - 자식 분기, 자식: input-> pipe로 부모한테 내용 전달 / 부모 : read pipe, interact with server
 
     /* 부모 프로세스와 자식 프로세스는 따로, 동시에 돌아간다 */
     if (pid < 0) perror ("fork error: ");
 
     else if (pid == 0){  //자식 프로세스 : 사용자 입력 -> 부모 클라로 보냄
         close (client_pipe[0]); //read안할거니까 닫음
-        signal (SIGUSR1, sig_usr1); //시그널 등록
 
-        int user_idx;
-        do {
-            user_idx = find_emtpy_user_slot();
-            printf("Hello World! Input your nickname : ");
+
+        int user_idx = 0;
+        while (1) {
+            user_idx = assign_user_idx();
+            dprint("client idx is %d", user_idx);
+            printf("Hello, World! plz input your nickname : "); //닉네임 입력받기
+            fflush(stdout);
+            
             char nickname[MAX_NAME_LEN];
-            memset (nickname, 0, BUFSIZE);
+            memset (nickname, 0, BUFSIZE); //닉네임 초기화
             
             int  n = read (0, nickname, MAX_NAME_LEN-1); //키보드로 닉네임 입력받음 : 49바이트까지 읽겠다
-            if (n>0){
+            if (n>1){
                 nickname[n-1] = '\0'; //문자열 끝 처리 (개행문자 제거)
                 strcpy (nicknames[user_idx], nickname); //복사해서 집어넣음
+                dprint("nicknames[user_idx] = %s\n", nicknames[user_idx]);
+                break; //닉네임 입력받고 집어 넣었으면 빠져나감
             }
             else {
                 perror ("read error");
                 eprint("nothing to read");
             }
-        } while(!nicknames[user_idx]); //닉네임 있으면 반복X
+        }
 
-        while (1){
+        while (1){ 
             memset (send_buf, 0, BUFSIZE); // 초기화
             char msg_with_nick[BUFSIZE];
             memset(msg_with_nick, 0, BUFSIZE); //초기화
             fgets(send_buf, BUFSIZE, stdin); //send_buf에 입력받음, blocking function
 
             snprintf(msg_with_nick, BUFSIZE, "[%s] %s", nicknames[user_idx], send_buf);
+            dprint("send msg to parent'%s\n", msg_with_nick); 
             write(client_pipe[1], msg_with_nick, strlen(msg_with_nick));
             kill (getppid(), SIGUSR1); //부모한테 signal 보냄
         }

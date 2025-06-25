@@ -3,7 +3,8 @@
 #ifndef RESOURCE_H
 #define RESOURCE_H
 
-#include <unistd.h> //pid_t
+#include <unistd.h> 
+#include <sys/types.h> //pid_t
 #include <signal.h> //사용자 정의 signal
 #include <stdio.h>
 
@@ -36,6 +37,6 @@ typedef struct {
 
 
 extern UserInfo users[MAX_CLIENT]; //전역 변수 선언
-int find_emtpy_user_slot();
+int find_empty_user_slot();
 
 #endif

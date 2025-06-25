@@ -90,7 +90,7 @@ int main (int argc, char **argv){
             continue;
         }
         
-        int user_idx = find_emtpy_user_slot();
+        int user_idx = find_empty_user_slot();
 
         if (user_idx == -1) {
             printf("[Info] Connection Rejected : Too many clients\n");
@@ -129,13 +129,14 @@ int main (int argc, char **argv){
         }
 
         else if (pid > 0){ // 부모 프로세스
-            signal (SIGCHLD, handle_child);
+            signal (SIGCHLD, handle_child); // 시그널 등록
             signal (SIGUSR1, sig_usr1); //자식이 부모한테 쓰고 알려줄거임 : sig_usr1 수행하는 건 부모쪽
             close (from_parent_to_child[PIPE_READ]); //부모는 자식한테 write, read필요 없음
             close (from_child_to_parent[PIPE_WRITE]); //부모는 자식으로부터 read only, write 필요 X
        
             /* UserInfo 구조체 users setter */
             users[user_idx].pid = pid; 
+            dprint("users[%d] = %d", user_idx, pid);
             users[user_idx].client_socket_fd = client_socket;
             users[user_idx].from_parent_to_child[PIPE_WRITE] = from_parent_to_child[PIPE_WRITE];
             users[user_idx].from_child_to_parent[PIPE_READ] = from_child_to_parent[PIPE_READ];
