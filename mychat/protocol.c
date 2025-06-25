@@ -1,5 +1,5 @@
 #include <stdio.h>
-#include "resource.h"
+#include "server.h"
 
 enum protocol {
     cmd1 = 0,

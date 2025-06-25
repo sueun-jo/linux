@@ -8,7 +8,9 @@
 #include <sys/socket.h>
 #include <sys/wait.h>
 #include "debug.h"
-#include "resource.h"
+
+#define MAX_CLIENT 20
+#define MAX_NAME_LEN 50
 
 #define SERVER_PORT 5432
 #define BUFSIZE 1024
@@ -95,7 +97,6 @@ int main (int argc, char **argv){
     else if (pid == 0){  //자식 프로세스 : 사용자 입력 -> 부모 클라로 보냄
         close (client_pipe[0]); //read안할거니까 닫음
 
-
         int user_idx = 0;
         while (1) {
             user_idx = assign_user_idx();
@@ -111,7 +112,7 @@ int main (int argc, char **argv){
                 nickname[n-1] = '\0'; //문자열 끝 처리 (개행문자 제거)
                 strcpy (nicknames[user_idx], nickname); //복사해서 집어넣음
                 dprint("nicknames[user_idx] = %s\n", nicknames[user_idx]);
-                printf("H")
+                printf("Hello, %s! Start Chatting Now "); //닉네임 확인용
                 break; //닉네임 입력받고 집어 넣었으면 빠져나감
             }
             else {

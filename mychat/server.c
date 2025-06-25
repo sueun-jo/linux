@@ -8,7 +8,7 @@
 #include <sys/wait.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
-#include "resource.h"
+#include "server.h"
 #include "debug.h"
 
 #define SERVER_PORT 5432
@@ -48,7 +48,7 @@ void sig_usr1(int sig){ //부모는 자식이 쓴 거 읽어서 다시 자식ser
     }
 }
 
-void sig_usr2(int sig){
+void sig_usr2(int sig){ //자식은 부모가 쓴 걸 읽어서 해당 내용 (부모)클라한테 쏴줘야함
 
 }
 
@@ -141,7 +141,7 @@ int main (int argc, char **argv){
             users[user_idx].from_parent_to_child[PIPE_WRITE] = from_parent_to_child[PIPE_WRITE];
             users[user_idx].from_child_to_parent[PIPE_READ] = from_child_to_parent[PIPE_READ];
             users[user_idx].is_activated = 1; 
-            users[user_idx].rid = -1; //rid -1로 초기화
+            users[user_idx].room_number = -1; //rid -1로 초기화
             
             printf("[INFO] New Client [# %d] is Connected.\n", user_idx);
             dprint("PID : %d, idx : %d", users[user_idx].pid, user_idx);
