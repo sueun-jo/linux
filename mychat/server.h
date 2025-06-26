@@ -35,7 +35,10 @@ typedef struct {
     pid_t mem_pids[MAX_CLIENT]; //현재 참여 중인 member들의 자식 pid 
 } RoomInfo;
 
-int user_idx = 0;
+int user_idx; //유저 idx
+ClientInfo users[MAX_CLIENT] = {0}; // ClientInfo 구조체 초기화
+RoomInfo rooms[MAX_ROOM] = {0}; //room 구조체 초기화
+
 
 int find_empty_user_slot(){
     for (int i=0; i<MAX_CLIENT; i++){
@@ -43,6 +46,12 @@ int find_empty_user_slot(){
     }
     return -1;
 }
-ClientInfo users[MAX_CLIENT] = {0}; //구조체 초기화
+
+int find_user_idx_by_pid(int child_pid){
+    for (int i=0; i<MAX_CLIENT; i++){
+        if (users[i].pid == child_pid) return i;
+    }
+}
+
 
 #endif

@@ -1,4 +1,3 @@
-
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h> 			// For STDOUT_FILENO
@@ -83,7 +82,7 @@ int main(int argc, char** argv)
 			kill(getppid( ), SIGUSR1);
 		} while (strcmp(buf, "quit") && g_cont);
 		close(g_pfd[1]);
-	} else { 			// pid > 0
+	} else { 			// pid > 0 //부모
 		signal(SIGUSR1, sigHandler);
 		signal(SIGCHLD, sigHandler);
 		close(g_pfd[1]);
