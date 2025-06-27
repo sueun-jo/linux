@@ -1,4 +1,4 @@
-/* serve.h는 server에서 관리하는 자원들이 들어있다^_^ */
+/* server.h는 server에서 관리하는 자원들이 들어있다^_^ */
 
 #ifndef SERVER_H
 #define SERVER_H

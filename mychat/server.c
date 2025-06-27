@@ -16,6 +16,7 @@
 
 int from_child_to_parent[2];
 int from_parent_to_child[2];
+int client_socket;
 
 /* zombie 방지 시그널 핸들러 */
 void sig_child (){
@@ -31,32 +32,33 @@ void sig_child (){
     }
 }
 
-void sig_usr1(){ //부모는 자식이 쓴 거 읽어서 다시 자식server에 write 해줘야함
+void sig_usr1(){ // 부모 do
     dprint("sig_usr1\n");
     char buf[BUFSIZE];
     memset (buf, 0, BUFSIZE);
+    dprint("now user_idx = %d\n", user_idx);
     int n = read (users[user_idx].from_child_to_parent[PIPE_READ], buf, BUFSIZE-1);
     if (n<=0){
         eprint("read error : nothing to read\n");
-    }
-    else{ //읽을 게 있으면
+    } else{ //읽을 게 있으면
         buf[n] = '\0';
         write (users[user_idx].from_parent_to_child[PIPE_WRITE], buf, strlen(buf));
+        
         kill  (users[user_idx].pid, SIGUSR2);
         dprint("write to child and make signal\n");
     }
 }
 
-void sig_usr2(){ //자식은 부모가 쓴 걸 읽어서 해당 내용 (부모)클라한테 쏴줘야함
+void sig_usr2(){ //여기는 자식이 do
     dprint("sig_usr2\n");
     char buf[BUFSIZE];
     memset(buf, 0, BUFSIZE);
-    dprint("usr2 - user_idx %d\n", user_idx);
-    int n = read (users[user_idx].from_parent_to_child[PIPE_READ], buf, BUFSIZE-1);
+    dprint("now user_idx %d\n", user_idx);
+    int n = read (from_parent_to_child[PIPE_READ], buf, BUFSIZE-1);
     if (n<=0){
         eprint("read erorr\n");
     } else {
-        int n = send (users[user_idx].client_socket_fd, buf, strlen(buf), 0);
+        int n = send (client_socket, buf, strlen(buf), 0);
         if (n<0){
             perror("send error");
         } else {
@@ -66,7 +68,7 @@ void sig_usr2(){ //자식은 부모가 쓴 걸 읽어서 해당 내용 (부모)�
 }
 
 int main (int argc, char **argv){
-    int listen_socket, client_socket; //listen_socket은 연결대기용, client_socket은 client와 통신용
+    int listen_socket; //listen_socket은 연결대기용, client_socket(전역)은 client와 통신용
     struct sockaddr_in server_addr, client_addr;
     socklen_t addrlen = sizeof(client_addr);
 
@@ -122,8 +124,8 @@ int main (int argc, char **argv){
             close (listen_socket); //자식은 listen_socket 필요 없음 : accept은 부모만 한다
     
             //자식은 부모한테 write만 하면 됨, read 필요 없음
-            close (users[user_idx].from_child_to_parent[PIPE_READ]); // 자식은 부모한테 write only, read 필요X
-            close (users[user_idx].from_parent_to_child[PIPE_WRITE]); // 부모한테 read only, write 필요X
+            close (from_child_to_parent[PIPE_READ]); // 자식은 부모한테 write only, read 필요X
+            close (from_parent_to_child[PIPE_WRITE]); // 부모한테 read only, write 필요X
 
             while(1) {
                 memset(buf, 0, BUFSIZE);
