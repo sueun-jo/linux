@@ -16,10 +16,9 @@
 #define BUFSIZE 1024
 
 int my_socket, client_pipe[2];
-char nicknames[MAX_CLIENT][MAX_NAME_LEN] = {0}; //char nicknames[20][50];
 
 /* 시그널 핸들러 모음*/
-void handle_exit (int sig){ //종료할 때의 시그널 핸들러
+void handle_exit (){ //종료할 때의 시그널 핸들러
     const char *quitmsg = "[Info] Good Bye!";
     write (1, quitmsg, strlen(quitmsg));
     _exit (0);
@@ -30,31 +29,23 @@ void handle_child (int sig){  //SIGCHLD 시그널 발생 시 시그널 핸들러
     while (waitpid(-1, &status, WNOHANG) > 0);
 } 
 
-void sig_usr1 (int signo){ //자식->부모한테 쓰고 알리는 시그널 :  부모는 읽어야 됨
-    dprint("sig_usr1\n");
+void sig_usr1 (int signo){ //부모 do
+    dprint("parent client do : sigusr1\n");
     char buf[BUFSIZE];
     memset (buf, 0, BUFSIZE);
     int n =  read (client_pipe[0], buf, BUFSIZE-1);
-    dprint("sig_usr1 received. read returned %d\n", n);
     if (n<=0) {
         dprint("read erorr\n");
     }
     else { //읽었으면
         buf[n] = '\0'; //문자열 처리 : 개행 제거
         send(my_socket, buf, strlen(buf), 0); // 읽은 내용을 서버로 보내기
-        dprint("send by usr1\n");
+        dprint("send msg to server\n");
     }
-}
-
-int assign_user_idx(){
-    for (int i=0; i<MAX_CLIENT; i++){
-        if (nicknames[i][0]=='\0') return i; // 비어있으면 return i
-    }
-    return -1; //빈 자리 없으면
 }
 
 int main (int argc, char **argv){
-    
+    char nickname[MAX_NAME_LEN];
     struct sockaddr_in server_addr;
     char send_buf[BUFSIZE] = {0}; // from child -> to server로 send 할 내용
     char recv_buf[BUFSIZE] = {0}; // form server로부터 recv 내용
@@ -72,7 +63,7 @@ int main (int argc, char **argv){
         perror ("socket error : ");
         return 1;
     }
-    dprint("my_socket 생성 완료\n");
+    dprint("my_socket is established\n");
     
     /* 서버 주소 생성 */
     memset (&server_addr, 0, sizeof(server_addr));
@@ -99,26 +90,30 @@ int main (int argc, char **argv){
     } else if (pid == 0) { // 자식 프로세스 : 사용자 입력 -> 부모 클라로 보냄
         close (client_pipe[0]); // read안할거니까 닫음
 
-        int user_idx = 0;
-        while (1) {
-            user_idx = assign_user_idx();
-            dprint("client idx is %d\n", user_idx);
-            printf("Hello, World! plz input your nickname : "); // 닉네임 입력받기
+        while (1) {        
+            printf("Hello, World! Plz input your nickname : "); // 닉네임 입력받기
             fflush(stdout);
+
+            memset (nickname, 0, BUFSIZE); // 닉네임 초기화            
+            fgets(nickname, MAX_NAME_LEN, stdin); //닉네임 입력받음
+            int x = strlen(nickname);
+            nickname[x - 1] = '\0';
+            write (client_pipe[1], nickname, strlen(nickname));
+            kill (getppid(), SIGUSR1); //부모한테 signal 보냄
+            break; //빠져나옴
+
+            /*old_version for input nickname*/
+            {
+            //int  n = read (0, nickname, MAX_NAME_LEN-1); // 키보드로 닉네임 입력받음 : 49바이트까지 읽겠다
             
-            char nickname[MAX_NAME_LEN];
-            memset (nickname, 0, BUFSIZE); // 닉네임 초기화
-            
-            int  n = read (0, nickname, MAX_NAME_LEN-1); // 키보드로 닉네임 입력받음 : 49바이트까지 읽겠다
-            if (n>1){
-                nickname[n-1] = '\0'; //문자열 끝 처리 (개행문자 제거)
-                strcpy (nicknames[user_idx], nickname); //복사해서 집어넣음
-                dprint("nicknames[%d] = %s\n",user_idx, nicknames[user_idx]);
-                printf("Hello, %s! Start Chatting Now\n", nickname); //닉네임 확인용
-                break; //닉네임 입력받고 집어 넣었으면 빠져나감
-            } else {
-                perror ("read error");
-                eprint("nothing to read\n");
+            // if (n>1){
+            //     nickname[n-1] = '\0'; //문자열 끝 처리 (개행문자 제거)
+            //     printf("Hello, %s! Start Chatting Now\n", nickname); //닉네임 확인용
+            //     break; //닉네임 입력받고 집어 넣었으면 빠져나감
+            // } else {
+            //     perror ("read error");
+            //     eprint("nothing to read\n");
+            // }
             }
         }
 
@@ -128,7 +123,7 @@ int main (int argc, char **argv){
             memset(msg_with_nick, 0, BUFSIZE); //초기화
             fgets(send_buf, BUFSIZE, stdin); //send_buf에 입력받음, blocking function
 
-            snprintf(msg_with_nick, BUFSIZE, "[%s] %s", nicknames[user_idx], send_buf);
+            snprintf(msg_with_nick, BUFSIZE, "[%s] %s", nickname, send_buf);
             write(client_pipe[1], msg_with_nick, strlen(msg_with_nick));
             kill (getppid(), SIGUSR1); //부모한테 signal 보냄
             dprint("send msg to parent(%d) client\n", getppid()); 
@@ -138,7 +133,7 @@ int main (int argc, char **argv){
     else { // (pid > 0) 부모 프로세스 : 서버와 전적으로 통신 (send/recv)
         close (client_pipe[1]); // 부모는read만 하니까 write필요 없으니까 닫음
         signal(SIGUSR1, sig_usr1); //SIGUSR1 받으면 sig_usr1() 수행 -> 여기서 send함
-        dprint("signal 등록:%d\n", getpid());
+        dprint("signal 등록%d\n", getpid());
         
         while (1){
             memset (recv_buf, 0, BUFSIZE);
@@ -154,7 +149,7 @@ int main (int argc, char **argv){
             }
             else { // n>0 읽을 게 있으면
             recv_buf[n] = '\0';
-            printf("[from server: %s", recv_buf);
+            printf("[from server]: %s", recv_buf);
             }
         }
         

@@ -6,8 +6,10 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/wait.h>
+#include <sys/signal.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+
 #include "server.h"
 #include "debug.h"
 
@@ -32,25 +34,68 @@ void sig_child (){
     }
 }
 
-void sig_usr1(){ // 부모 do
-    dprint("sig_usr1\n");
+// void sig_usr1() { //부모 server do
+//     dprint("parent server do sig_usr1\n");
+//     char buf[BUFSIZE];
+//     memset(buf, 0, BUFSIZE);
+
+//     // 먼저 어떤 자식이 메시지를 보냈는지 찾아야 함
+//     int sender_idx = -1;
+
+//     for (int i = 0; i < MAX_CLIENT; i++) {
+//         if (users[i].is_activated) {
+//             int n = read(users[i].from_child_to_parent[PIPE_READ], buf, BUFSIZE-1);
+//             if (n > 0) { //읽을 게 있으면
+//                 buf[n] = '\0';
+//                 sender_idx = i;
+//                 dprint("recv msg from child[%d] : %s\n", i, buf);
+//                 break; // 메시지 하나만 받고, broadcast는 나중에 따로
+//             }
+//         }
+//     }
+
+//     // broadcast to everyone except sender
+//     if (sender_idx != -1) {
+//         for (int i = 0; i < MAX_CLIENT; i++) {
+//             if (users[i].is_activated && i != sender_idx) { //활성화가 돼 있고 sender_idx가 아니
+//                 write(users[i].from_parent_to_child[PIPE_WRITE], buf, strlen(buf));
+//                 kill(users[i].pid, SIGUSR2);
+//                 dprint("broadcast to user[%d]\n", i);
+//             }
+//         }
+//     }
+// }
+
+void sig_usr1(int signo, siginfo_t *info, void *context) {
+    dprint("parent server do sig_usr1\n");
+
+    pid_t sender_pid = info->si_pid;
+    int sender_idx = find_user_idx_by_pid(sender_pid);
+    if (sender_idx < 0) {
+        eprint("cannot find sender\n");
+        return;
+    }
+
     char buf[BUFSIZE];
-    memset (buf, 0, BUFSIZE);
-    dprint("now user_idx = %d\n", user_idx);
-    int n = read (users[user_idx].from_child_to_parent[PIPE_READ], buf, BUFSIZE-1);
-    if (n<=0){
-        eprint("read error : nothing to read\n");
-    } else{ //읽을 게 있으면
+    memset(buf, 0, BUFSIZE);
+    int n = read(users[sender_idx].from_child_to_parent[PIPE_READ], buf, BUFSIZE-1);
+    if (n > 0) {
         buf[n] = '\0';
-        write (users[user_idx].from_parent_to_child[PIPE_WRITE], buf, strlen(buf));
-        
-        kill  (users[user_idx].pid, SIGUSR2);
-        dprint("write to child and make signal\n");
+
+        // broadcast: 나 빼고 모두에게
+        for (int i = 0; i < MAX_CLIENT; i++) {
+            if (users[i].is_activated && i != sender_idx) {
+                write(users[i].from_parent_to_child[PIPE_WRITE], buf, strlen(buf));
+                kill(users[i].pid, SIGUSR2);
+            }
+        }
+    } else {
+        eprint("no message from pipe\n");
     }
 }
 
-void sig_usr2(){ //여기는 자식이 do
-    dprint("sig_usr2\n");
+void sig_usr2(){ // 자식 server do
+    dprint("client server do sig_usr2\n");
     char buf[BUFSIZE];
     memset(buf, 0, BUFSIZE);
     dprint("now user_idx %d\n", user_idx);
@@ -120,7 +165,7 @@ int main (int argc, char **argv){
         pid = fork(); // 부모 - 자식 나눠짐
 
         if (pid == 0){ //자식 프로세스
-            signal (SIGUSR2, sig_usr2); //signal등록 parent가 child한테 너 읽어야된다고 알려줌
+            signal (SIGUSR2, sig_usr2); // sig_usr2는 자식do
             close (listen_socket); //자식은 listen_socket 필요 없음 : accept은 부모만 한다
     
             //자식은 부모한테 write만 하면 됨, read 필요 없음
@@ -135,7 +180,7 @@ int main (int argc, char **argv){
                     break;
                 } else {
                     buf[n] = '\0'; //문자열 처리
-                    dprint("recv from client\n");
+                    dprint("recv msg from client\nmsg : %s\n", buf);
                     write (from_child_to_parent[PIPE_WRITE], buf, strlen(buf));
                     dprint("send msg from child server to parent server\n");
                     kill (getppid(), SIGUSR1); //쓰고 나서 부모한테 SIGUSR1 전달 
@@ -143,11 +188,19 @@ int main (int argc, char **argv){
             }
             exit(0);
         } else if (pid > 0){ // 부모 프로세스
-            signal (SIGCHLD, sig_child); // 시그널 등록
-            signal (SIGUSR1, sig_usr1); //자식이 부모한테 쓰고 알려줄거임 : sig_usr1 수행하는 건 부모쪽
+
+            // sigaction 등록
+            struct sigaction sa;
+            sa.sa_sigaction = sig_usr1;
+            sa.sa_flags = SA_SIGINFO;
+            sigemptyset(&sa.sa_mask);
+            sigaction(SIGUSR1, &sa, NULL);
+
+            signal (SIGCHLD, sig_child); 
+            
             close (from_parent_to_child[PIPE_READ]); //부모는 자식한테 write, read필요 없음
             close (from_child_to_parent[PIPE_WRITE]); //부모는 자식으로부터 read only, write 필요 X
-       
+            
             /* UserInfo 구조체 users setter */
             users[user_idx].pid = pid; //자식pid를 부모가 갖고 있다
             dprint("users[%d] = %d\n", user_idx, pid);
@@ -157,9 +210,6 @@ int main (int argc, char **argv){
             users[user_idx].is_activated = 1; 
             users[user_idx].room_number = -1; //rid -1로 초기화
             
-            close (users[user_idx].from_parent_to_child[PIPE_READ]);
-            close (users[user_idx].from_child_to_parent[PIPE_WRITE]);
-
             printf("[INFO] New Client [# %d] is Connected.\n", user_idx);
             dprint("PID : %d, idx : %d\n", users[user_idx].pid, user_idx);
             
