@@ -237,6 +237,7 @@ void handle_broadcast(int sender_idx, const char *msg){
         if (users[i].is_activated && i != sender_idx /* && users[i].room_number == user[send_idx].room_number*/) {
             char msg_with_nick[BUFSIZE];
             memset(msg_with_nick, 0, BUFSIZE);
+            //닉네임이랑 메시지 붙이기
             snprintf(msg_with_nick, BUFSIZE, "[%s]: %s\n", users[sender_idx].nickname, msg);
             write(users[i].from_parent_to_child[PIPE_WRITE], msg_with_nick, strlen(msg_with_nick));
             kill(users[i].pid, SIGUSR2);
