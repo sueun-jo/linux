@@ -9,10 +9,11 @@
 #include <sys/signal.h> 
 #include <signal.h> 
 #include <stdio.h>
+#include "protocol.h"
 
-#define MAX_ROOM 10 //방은 최대 10개
-#define MAX_CLIENT 20 //최대 client 수는 20명
-#define MAX_NAME_LEN 50
+#define MAX_ROOM 16 //방은 최대 16개
+#define MAX_CLIENT 24 //최대 client 수는 20명
+#define MAX_NAME_LEN 64
 #define BUFSIZE 1024
 
 /* pipe fd read and write */
@@ -31,7 +32,8 @@ typedef struct {
 } ClientInfo;
 
 /* 방 정보 구조체 */
-typedef struct { 
+typedef struct {
+    char room_name [64];
     int room_number; // 방 number
     int mem_cnt; //현재 참여 중인 member 수
     pid_t mem_pids[MAX_CLIENT]; //현재 참여 중인 member들의 자식 pid 
@@ -41,7 +43,6 @@ typedef struct {
 int user_idx; //유저 idx
 ClientInfo users[MAX_CLIENT] = {0}; // ClientInfo 구조체 초기화
 RoomInfo rooms[MAX_ROOM] = {0}; //room 구조체 초기화
-
 
 int find_empty_user_slot(){
     for (int i=0; i<MAX_CLIENT; i++){
@@ -56,6 +57,18 @@ int find_user_idx_by_pid(int child_pid){
     }
     return -1;
 }
+
+int find_user_idx_by_nickname();
+
+void execute_command(int sender_idx, ParsedCommand cmd);
+void handle_broadcast(int sender_idx, const char *msg);
+void handle_whisper(int sender_idx, const char *target, const char *msg);
+void handle_join(int sender_idx, const char *room, const char *msg);
+void handle_leave(int sender_idx);
+void handle_add(int sender_idx, const char *room);
+void handle_rm(int sender_idx, const char *room);
+void handle_list(int sender_idx);
+void handle_users(int sender_idx);
 
 
 #endif

@@ -9,9 +9,11 @@
 #include <sys/signal.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <errno.h>
 
 #include "server.h"
 #include "debug.h"
+#include "protocol.h"
 
 #define SERVER_PORT 5432
 #define BUFSIZE 1024
@@ -34,64 +36,37 @@ void sig_child (){
     }
 }
 
-// void sig_usr1() { //부모 server do
-//     dprint("parent server do sig_usr1\n");
-//     char buf[BUFSIZE];
-//     memset(buf, 0, BUFSIZE);
-
-//     // 먼저 어떤 자식이 메시지를 보냈는지 찾아야 함
-//     int sender_idx = -1;
-
-//     for (int i = 0; i < MAX_CLIENT; i++) {
-//         if (users[i].is_activated) {
-//             int n = read(users[i].from_child_to_parent[PIPE_READ], buf, BUFSIZE-1);
-//             if (n > 0) { //읽을 게 있으면
-//                 buf[n] = '\0';
-//                 sender_idx = i;
-//                 dprint("recv msg from child[%d] : %s\n", i, buf);
-//                 break; // 메시지 하나만 받고, broadcast는 나중에 따로
-//             }
-//         }
-//     }
-
-//     // broadcast to everyone except sender
-//     if (sender_idx != -1) {
-//         for (int i = 0; i < MAX_CLIENT; i++) {
-//             if (users[i].is_activated && i != sender_idx) { //활성화가 돼 있고 sender_idx가 아니
-//                 write(users[i].from_parent_to_child[PIPE_WRITE], buf, strlen(buf));
-//                 kill(users[i].pid, SIGUSR2);
-//                 dprint("broadcast to user[%d]\n", i);
-//             }
-//         }
-//     }
-// }
-
-void sig_usr1(int signo, siginfo_t *info, void *context) {
+void sig_usr1(int signo, siginfo_t *info, void *context) { //부모 do
     dprint("parent server do sig_usr1\n");
 
     pid_t sender_pid = info->si_pid;
     int sender_idx = find_user_idx_by_pid(sender_pid);
     if (sender_idx < 0) {
-        eprint("cannot find sender\n");
+        eprint("cannot find sender pid\n");
         return;
     }
-
+    
     char buf[BUFSIZE];
     memset(buf, 0, BUFSIZE);
     int n = read(users[sender_idx].from_child_to_parent[PIPE_READ], buf, BUFSIZE-1);
-    if (n > 0) {
+    //자식이 쓴 걸 읽으면 n
+    if (n<=0){
+        eprint("noting to read from pipe\n");
+    } else if (n > 0) {
         buf[n] = '\0';
 
-        // broadcast: 나 빼고 모두에게
-        for (int i = 0; i < MAX_CLIENT; i++) {
-            if (users[i].is_activated && i != sender_idx) {
-                write(users[i].from_parent_to_child[PIPE_WRITE], buf, strlen(buf));
-                kill(users[i].pid, SIGUSR2);
-            }
+        /* 첫 수신 메시지는 닉네임으로 처리 */
+        if (users[sender_idx].nickname[0] == '\0'){
+        dprint("nickname set : nickname [%s]\n", buf);
+        strncpy(users[sender_idx].nickname, buf, MAX_NAME_LEN -1);
+        dprint("user[%d].nickname is %s\n", sender_idx, users[sender_idx].nickname);
+        return;
         }
-    } else {
-        eprint("no message from pipe\n");
-    }
+        /* *************************** */
+
+        ParsedCommand cmd = parse_command(buf); //parse_command하게 됨
+        execute_command(sender_idx, cmd);
+    } 
 }
 
 void sig_usr2(){ // 자식 server do
@@ -145,8 +120,9 @@ int main (int argc, char **argv){
         /* accept : 클라이언트가 요청해서 생긴 socket이기에 client_socket이라 명명 */
         /* accept하면 서버:클라이언트 1:1 관계를 만들어야 하니까 fork() 해야됨 */
         client_socket = accept (listen_socket, (struct sockaddr*)&client_addr, &addrlen);
-        if (client_socket < 0){       
-            perror ("accept error : ");
+        if (client_socket < 0){
+            if (errno == EINTR) continue;  // 시그널 때문에 끊긴 건 무시하고 다시 시도
+            perror ("accept error");
             continue;
         }
         
@@ -189,7 +165,7 @@ int main (int argc, char **argv){
             exit(0);
         } else if (pid > 0){ // 부모 프로세스
 
-            // sigaction 등록
+            /* sigaction등록 */
             struct sigaction sa;
             sa.sa_sigaction = sig_usr1;
             sa.sa_flags = SA_SIGINFO;
@@ -221,4 +197,72 @@ int main (int argc, char **argv){
 
     close (listen_socket);
     return 0;
+}
+
+void execute_command(int sender_idx, ParsedCommand cmd){
+    switch (cmd.type){
+        case CMD_BROADCAST:
+            handle_broadcast(sender_idx, cmd.msg);
+            break;
+        case CMD_WHISPER:
+            handle_whisper(sender_idx, cmd.target, cmd.msg);
+            break;
+        case CMD_JOIN:
+            handle_join(sender_idx, cmd.target, cmd.msg);
+            break;
+        case CMD_LEAVE:
+            handle_leave(sender_idx);
+            break;
+        case CMD_RM:
+            handle_rm (sender_idx, cmd.target);
+            break;
+        case CMD_ADD:
+            handle_add (sender_idx, cmd.target);
+            break;
+        case CMD_LIST:
+            handle_list(sender_idx);
+            break;
+        case CMD_USERS:
+            handle_users(sender_idx);
+            break;
+        default: CMD_UNKNOWN;
+            printf("Wrong Command.\n");
+            break;
+    }
+}
+
+void handle_broadcast(int sender_idx, const char *msg){
+    // broadcast: 나 빼고 모두에게
+    for (int i = 0; i < MAX_CLIENT; i++) {
+        if (users[i].is_activated && i != sender_idx /* && users[i].room_number == user[send_idx].room_number*/) {
+            char msg_with_nick[BUFSIZE];
+            memset(msg_with_nick, 0, BUFSIZE);
+            snprintf(msg_with_nick, BUFSIZE, "[%s]: %s\n", users[sender_idx].nickname, msg);
+            write(users[i].from_parent_to_child[PIPE_WRITE], msg_with_nick, strlen(msg_with_nick));
+            kill(users[i].pid, SIGUSR2);
+        }
+    }
+}
+
+void handle_whisper(int sender_idx, const char *target, const char *msg){
+    dprint("not implemented yet\n");
+}
+
+void handle_join(int sender_idx, const char *room, const char *msg){
+    dprint("not implemented yet\n");
+}
+void handle_leave(int sender_idx){
+    dprint("not implemented yet\n");
+}
+void handle_add(int sender_idx, const char *room){
+    dprint("not implemented yet\n");
+}
+void handle_rm(int sender_idx, const char *room){
+    dprint("not implemented yet\n");
+}
+void handle_list(int sender_idx){
+    dprint("not implemented yet\n");
+}
+void handle_users(int sender_idx){
+    dprint("not implemented yet\n");
 }

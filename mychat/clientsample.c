@@ -35,7 +35,7 @@ void sigHandler(int signo)
 	if(signo == SIGUSR1) { 
 		char buf[BUFSIZ];
 		int n = read(g_pfd[0], buf, BUFSIZ);
-		write(g_sockfd, buf, n);
+		write(g_sockfd, buf, n); //send로 봐도 무방하다
 	} else if(signo == SIGCHLD) {
 		g_cont = 0;
 		printf("Connection is lost\n");
@@ -55,7 +55,7 @@ int main(int argc, char** argv)
 		return -1;
 	}
 
-	g_sockfd = socket(AF_INET, SOCK_STREAM, 0);
+	g_sockfd = socket(AF_INET, SOCK_STREAM, 0); //서버랑 통신할 수 있는 gate
 	if(g_sockfd < 0) {
 		perror("socket");
 		return -1;
@@ -70,22 +70,22 @@ int main(int argc, char** argv)
 	pipe(g_pfd);
 	if((pid = fork()) < 0) {
 		perror("fork( )");
-	} else if (pid == 0) {
+	} else if (pid == 0) { //자식 프로세스 do
 		signal(SIGCHLD, sigHandler);
-		close(g_pfd[0]);
+		close(g_pfd[0]); //자식은 읽을 필요 없어서 닫음
 		do { 
 			memset(buf, 0, BUFSIZ); 
 			printf(COLOR_BLUE "\r> " COLOR_RESET);
 			fflush(NULL);
 			fgets(buf, BUFSIZ, stdin);
-			write(g_pfd[1], buf, strlen(buf)+1);
-			kill(getppid( ), SIGUSR1);
+			write(g_pfd[1], buf, strlen(buf)+1); //쓴다 
+			kill(getppid( ), SIGUSR1); // sigusr1을 보낸다
 		} while (strcmp(buf, "quit") && g_cont);
-		close(g_pfd[1]);
-	} else { 			// pid > 0 //부모
+		// close(g_pfd[1]);
+	} else { 			// pid > 0 // 부모 프로세스 do
 		signal(SIGUSR1, sigHandler);
 		signal(SIGCHLD, sigHandler);
-		close(g_pfd[1]);
+		close(g_pfd[1]); //쓰기 닫음
 		while(g_cont) { 
 			memset(buf, 0, BUFSIZ);
 			int n = read(g_sockfd, buf, BUFSIZ);
@@ -94,7 +94,7 @@ int main(int argc, char** argv)
 			printf(COLOR_BLUE "\r> " COLOR_RESET);
 			fflush(NULL);
 		}
-		close(g_pfd[0]);
+		// close(g_pfd[0]);
 		kill(pid, SIGCHLD);
 		wait(NULL);
 	}

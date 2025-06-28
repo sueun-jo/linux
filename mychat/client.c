@@ -9,8 +9,8 @@
 #include <sys/wait.h>
 #include "debug.h"
 
-#define MAX_CLIENT 20
-#define MAX_NAME_LEN 50
+#define MAX_CLIENT 24
+#define MAX_NAME_LEN 64
 
 #define SERVER_PORT 5432
 #define BUFSIZE 1024
@@ -101,36 +101,21 @@ int main (int argc, char **argv){
             write (client_pipe[1], nickname, strlen(nickname));
             kill (getppid(), SIGUSR1); //부모한테 signal 보냄
             break; //빠져나옴
-
-            /*old_version for input nickname*/
-            {
-            //int  n = read (0, nickname, MAX_NAME_LEN-1); // 키보드로 닉네임 입력받음 : 49바이트까지 읽겠다
-            
-            // if (n>1){
-            //     nickname[n-1] = '\0'; //문자열 끝 처리 (개행문자 제거)
-            //     printf("Hello, %s! Start Chatting Now\n", nickname); //닉네임 확인용
-            //     break; //닉네임 입력받고 집어 넣었으면 빠져나감
-            // } else {
-            //     perror ("read error");
-            //     eprint("nothing to read\n");
-            // }
-            }
         }
 
         while (1){ 
             memset (send_buf, 0, BUFSIZE); // 초기화
-            char msg_with_nick[BUFSIZE];
-            memset(msg_with_nick, 0, BUFSIZE); //초기화
             fgets(send_buf, BUFSIZE, stdin); //send_buf에 입력받음, blocking function
+            int len = strlen(send_buf);
 
-            snprintf(msg_with_nick, BUFSIZE, "[%s] %s", nickname, send_buf);
-            write(client_pipe[1], msg_with_nick, strlen(msg_with_nick));
+            if (send_buf[len-1] =='\n'){
+                send_buf[len-1] = '\0';
+            }
+            write(client_pipe[1], send_buf, strlen(send_buf));
             kill (getppid(), SIGUSR1); //부모한테 signal 보냄
             dprint("send msg to parent(%d) client\n", getppid()); 
         }
-    }
-
-    else { // (pid > 0) 부모 프로세스 : 서버와 전적으로 통신 (send/recv)
+    } else { // (pid > 0) 부모 프로세스 : 서버와 전적으로 통신 (send/recv)
         close (client_pipe[1]); // 부모는read만 하니까 write필요 없으니까 닫음
         signal(SIGUSR1, sig_usr1); //SIGUSR1 받으면 sig_usr1() 수행 -> 여기서 send함
         dprint("signal 등록%d\n", getpid());
@@ -149,7 +134,7 @@ int main (int argc, char **argv){
             }
             else { // n>0 읽을 게 있으면
             recv_buf[n] = '\0';
-            printf("[from server]: %s", recv_buf);
+            printf("[from server]: %s\n", recv_buf);
             }
         }
         
