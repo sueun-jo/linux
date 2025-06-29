@@ -58,7 +58,14 @@ int find_user_idx_by_pid(int child_pid){
     return -1;
 }
 
-int find_user_idx_by_nickname();
+int find_user_idx_by_nickname(const char *nickname){
+    for (int i=0; i < MAX_CLIENT; i++){
+        if (users[i].is_activated && strcmp(users[i].nickname, nickname) == 0){
+            return i;
+        }
+    }
+    return -1;
+}
 
 void execute_command(int sender_idx, ParsedCommand cmd);
 void handle_broadcast(int sender_idx, const char *msg);
@@ -69,6 +76,7 @@ void handle_add(int sender_idx, const char *room);
 void handle_rm(int sender_idx, const char *room);
 void handle_list(int sender_idx);
 void handle_users(int sender_idx);
+void handle_unknown(int sender_idx);
 
 
 #endif

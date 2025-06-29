@@ -35,8 +35,8 @@ void sig_child (){
         } else {eprint("no child pid %d\n", pid);}
     }
 }
-
-void sig_usr1(int signo, siginfo_t *info, void *context) { //부모 do
+/* sig_usr1 : 부모 server do */
+void sig_usr1(int signo, siginfo_t *info, void *context) { 
     dprint("parent server do sig_usr1\n");
 
     pid_t sender_pid = info->si_pid;
@@ -64,7 +64,8 @@ void sig_usr1(int signo, siginfo_t *info, void *context) { //부모 do
         }
         /* *************************** */
 
-        ParsedCommand cmd = parse_command(buf); //parse_command하게 됨
+        ParsedCommand cmd = parse_command(buf); //parse_command : cmd 종류 나누기
+        dprint("parsed command : ");
         execute_command(sender_idx, cmd);
     } 
 }
@@ -226,7 +227,7 @@ void execute_command(int sender_idx, ParsedCommand cmd){
             handle_users(sender_idx);
             break;
         default: CMD_UNKNOWN;
-            printf("Wrong Command.\n");
+            handle_unknown(sender_idx);
             break;
     }
 }
@@ -246,7 +247,29 @@ void handle_broadcast(int sender_idx, const char *msg){
 }
 
 void handle_whisper(int sender_idx, const char *target, const char *msg){
-    dprint("not implemented yet\n");
+    int recv_idx = find_user_idx_by_nickname(target);
+    
+    if (recv_idx == -1){ //못찾은 경우
+        char whisper_err[BUFSIZE];
+        memset(whisper_err, 0, BUFSIZE);
+        snprintf(whisper_err, BUFSIZE, "[ERR] No User named [%s]\n", target);
+        write (users[sender_idx].from_parent_to_child[PIPE_WRITE], whisper_err, strlen(whisper_err));
+        kill (users[sender_idx].pid, SIGUSR2);
+        return;
+    } else if (recv_idx == sender_idx){ // 귓속말 보내는 상대가 나인 경우
+        char whisper_err[] = "[ERR] Cannot /whisper to yourself\n";
+        write (users[sender_idx].from_parent_to_child[PIPE_WRITE], whisper_err, strlen(whisper_err));
+        kill (users[sender_idx].pid, SIGUSR2);
+        return;
+    }
+    
+    char whisper_msg[BUFSIZE];
+    memset(whisper_msg, 0, BUFSIZE);
+    snprintf(whisper_msg, BUFSIZE, "[%s 님의귓속말]: %s\n", users[sender_idx].nickname, msg);
+    dprint("[%s 님의귓속말]: %s\n", users[sender_idx].nickname, msg);
+    write (users[recv_idx].from_parent_to_child[PIPE_WRITE], whisper_msg, strlen(whisper_msg));
+    kill(users[recv_idx].pid, SIGUSR2);
+    return;
 }
 
 void handle_join(int sender_idx, const char *room, const char *msg){
@@ -266,4 +289,11 @@ void handle_list(int sender_idx){
 }
 void handle_users(int sender_idx){
     dprint("not implemented yet\n");
+}
+
+void handle_unknown(int sender_idx){
+    char unknown_msg[] = "[Err] Wrong Command\n";
+    dprint("unknown cmd\n");
+    write (users[sender_idx].from_parent_to_child[PIPE_WRITE], unknown_msg, strlen(unknown_msg));
+    kill(users[sender_idx].pid, SIGUSR2);
 }

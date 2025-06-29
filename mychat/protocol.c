@@ -22,8 +22,8 @@ ParsedCommand parse_command (const char *input) {
     
     int matched = sscanf(input, "/%s %s %s", cmd, arg1, arg2);
 
-    if (strcmp(cmd, "w") == 0 && matched >= 3) {
-        result.type = CMD_WHISPER; 
+    if (strcmp(cmd, "whisper") == 0 && matched >= 3) {
+        result.type = CMD_WHISPER;
         strncpy(result.target, arg1, MAX_NAME_LEN - 1);
         strncpy(result.msg, arg2, MAX_MSG_LEN - 1);
     } else if (strcmp(cmd, "add") == 0 && matched >= 2) {
