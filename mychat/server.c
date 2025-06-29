@@ -95,6 +95,11 @@ int main (int argc, char **argv){
     char buf [BUFSIZE];
     pid_t pid;
     
+    /* rooms 구조체 배열 room_idx 수정 */
+    for (int i = 0; i < MAX_ROOM; i++){
+            rooms[i].room_idx = -1;
+    }
+
     listen_socket = socket (AF_INET, SOCK_STREAM, 0); //tcp socket 통신 할게요
     if (listen_socket < 0){
         perror ("socket error : ");
@@ -184,7 +189,7 @@ int main (int argc, char **argv){
             users[user_idx].from_parent_to_child[PIPE_WRITE] = from_parent_to_child[PIPE_WRITE];
             users[user_idx].from_child_to_parent[PIPE_READ] = from_child_to_parent[PIPE_READ];
             users[user_idx].is_activated = 1; 
-            users[user_idx].room_number = -1; //rid -1로 초기화
+            users[user_idx].room_idx = -1; //rid -1로 초기화
             
             printf("[INFO] New Client [# %d] is Connected.\n", user_idx);
             dprint("PID : %d, idx : %d\n", users[user_idx].pid, user_idx);
@@ -234,7 +239,7 @@ void execute_command(int sender_idx, ParsedCommand cmd){
 void handle_broadcast(int sender_idx, const char *msg){
     // broadcast: 나 빼고 모두에게
     for (int i = 0; i < MAX_CLIENT; i++) {
-        if (users[i].is_activated && i != sender_idx /* && users[i].room_number == user[send_idx].room_number*/) {
+        if (users[i].is_activated && (i != sender_idx) /* && users[i].room_idx == user[send_idx].room_idx*/) {
             char msg_with_nick[BUFSIZE];
             memset(msg_with_nick, 0, BUFSIZE);
             //닉네임이랑 메시지 붙이기
@@ -264,20 +269,42 @@ void handle_whisper(int sender_idx, const char *target, const char *msg){
     
     char whisper_msg[BUFSIZE];
     memset(whisper_msg, 0, BUFSIZE);
-    snprintf(whisper_msg, BUFSIZE, "[%s 님의귓속말]: %s\n", users[sender_idx].nickname, msg);
+    snprintf(whisper_msg, BUFSIZE, "[%s님의귓속말]: %s\n", users[sender_idx].nickname, msg);
     dprint("[%s 님의귓속말]: %s\n", users[sender_idx].nickname, msg);
     write (users[recv_idx].from_parent_to_child[PIPE_WRITE], whisper_msg, strlen(whisper_msg));
     kill(users[recv_idx].pid, SIGUSR2);
     return;
 }
 
-void handle_join(int sender_idx, const char *room, const char *msg){
-    dprint("not implemented yet\n");
+void handle_join(int sender_idx, const char *room_name, const char *msg){
+    /* 방 있는지 확인 */
+    for (int i = 0; i< MAX_ROOM; i++){
+        if (rooms[i].is_activated && (strcmp (rooms[i].room_name, room_name) == 0)){
+            users[sender_idx].room_idx = i; //user의 room_idx 해당값으로 변경
+            rooms[i].mem_cnt++; //mem_cnt 증가
+            char join_msg[BUFSIZE];
+            memset(join_msg, 0, BUFSIZE);
+            snprintf(join_msg, BUFSIZE, "You joined room named [%s].\n", rooms[i].room_name); 
+            dprint("user [%s] joined room [%s].\n",users[sender_idx].nickname, rooms[i].room_name);
+            write (users[sender_idx].from_parent_to_child[PIPE_WRITE], join_msg, strlen(join_msg));
+            kill (users[sender_idx].pid, SIGUSR2);
+            return;
+        }
+    }
+    char join_err[BUFSIZE];
+    memset(join_err, 0, BUFSIZE);
+    snprintf(join_err, BUFSIZE, "[ERR] No Room named [%s]\n", room_name);
+    write (users[sender_idx].from_parent_to_child[PIPE_WRITE], join_err, strlen(join_err));
+    kill (users[sender_idx].pid, SIGUSR2);
+    return;
 }
 void handle_leave(int sender_idx){
+
     dprint("not implemented yet\n");
 }
+/*방 추가하는 /add [방이름] 함수*/
 void handle_add(int sender_idx, const char *room_name){
+    
     /* 방 이름 중복 검사 */
     for (int i = 0; i< MAX_ROOM; i++){
         if (rooms[i].is_activated && strcmp (rooms[i].room_name, room_name)){
@@ -290,23 +317,68 @@ void handle_add(int sender_idx, const char *room_name){
 
     /* 빈 방 찾기 */
     for (int i = 0; i < MAX_ROOM; i++){
-        if (rooms[i].is_activated == 0){ //활성화 안돼있으면
+        if (rooms[i].is_activated != 1){ //활성화 안돼있으면
             /* 방 정보 등록 : rooms setter*/
             strncpy(rooms[i].room_name, room_name, sizeof(rooms[i].room_name)-1 );
             rooms[i].room_idx = i;
-            rooms[i].mem_cnt = 0; // join 할 때 cnt++;
-
+            rooms[i].mem_cnt = 0; // join 할 때 cnt++ 할거임
+            rooms[i].is_activated = 1; //활성화
+            dprint("방 생성 완료\n");
+            char msg[BUFSIZE];
+            memset(msg, 0, BUFSIZE);
+            snprintf(msg, BUFSIZE, "room named [%s] is created.\n", rooms[i].room_name);
+            write(users[sender_idx].from_parent_to_child[PIPE_WRITE], msg, strlen(msg));
+            kill(users[sender_idx].pid, SIGUSR2);
+            return;
         }
     }
-    dprint("not implemented yet\n");
 }
-void handle_rm(int sender_idx, const char *room){
-    dprint("not implemented yet\n");
+
+/* 방을 remove하는 /rm [방이름] 함수 */
+void handle_rm(int sender_idx, const char *room_name){
+    for (int i = 0; i < MAX_ROOM; i++){
+        if (strcmp (rooms[i].room_name, room_name) && rooms[i].is_activated){
+
+            int removed_room_idx = i;
+
+            for (int j = 0; j < MAX_CLIENT; j++){
+                if (users[j].room_idx == removed_room_idx){ //room_idx와 users[i].room_idx가 일치할때
+                    users[j].room_idx = -1;
+                }
+            }
+            char msg[BUFSIZE];
+            memset(msg, 0, BUFSIZE);
+            snprintf(msg, BUFSIZE, "room named [%s] is removed.\n", rooms[i].room_name);
+            /* rooms[i] 초기화 */
+            memset(&rooms[i], 0, sizeof(RoomInfo)); //rooms[i] = {0}; C++스타일의 초기화, C에서는 불가능
+            rooms[i].room_idx = -1;           
+            write(users[sender_idx].from_parent_to_child[PIPE_WRITE], msg, strlen(msg));
+            kill(users[sender_idx].pid, SIGUSR2);
+            return;
+        }
+    }
+
+    //방을 못찾은 경우
+    char rm_err[BUFSIZE];
+    snprintf(rm_err, BUFSIZE, "[ERR] No room named [%s].\n", room_name);
+    write(users[sender_idx].from_parent_to_child[PIPE_WRITE], rm_err, strlen(rm_err));
+    kill(users[sender_idx].pid, SIGUSR2);
+    return;
 }
+
 void handle_list(int sender_idx){
-    dprint("not implemented yet\n");
+    for (int i = 0; i < MAX_ROOM; i++){
+        if (rooms[i].is_activated == 1)
+            {
+                
+            }//client에 is activated 방 제목들 보여줘야함, strncat 함수 사용 예정
+    }
+    return;
 }
+
+/* 해당 방에 있는 모든 사용자 목록 보여주는 /users 함수 */
 void handle_users(int sender_idx){
+    int which_room = find_room_idx_by_sender_idx(sender_idx);
     dprint("not implemented yet\n");
 }
 
@@ -315,4 +387,5 @@ void handle_unknown(int sender_idx){
     dprint("unknown cmd\n");
     write (users[sender_idx].from_parent_to_child[PIPE_WRITE], unknown_msg, strlen(unknown_msg));
     kill(users[sender_idx].pid, SIGUSR2);
+    return;
 }

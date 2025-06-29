@@ -33,7 +33,7 @@ ParsedCommand parse_command (const char *input) {
         result.type = CMD_WHISPER;
         strncpy(result.target, arg1, MAX_NAME_LEN - 1);
         strncpy(result.msg, start, MAX_MSG_LEN - 1); //start 메시지 시작 지점
-        dprint("parsing result : %s / %s / %s / matched:%d\n",cmd, arg1, arg2, matched);
+        dprint("parsing result : %s / %s / %s / matched:%d\n",cmd, arg1, start, matched);
     } else if (strcmp(cmd, "add") == 0 && matched >= 2) {
         result.type = CMD_ADD; 
         strncpy(result.target, arg1, MAX_NAME_LEN - 1);

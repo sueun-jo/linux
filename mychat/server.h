@@ -23,7 +23,7 @@
 /* 유저 정보 구조체 */
 typedef struct {
     char nickname[MAX_NAME_LEN]; // 중복 불가
-    int room_number;//room_number (0~9)
+    int room_idx;//room_number (0~9)
     pid_t pid; //자식 프로세스 pid
     int from_parent_to_child[2]; // 부모->자식 : 부모는 write, 자식은 read
     int from_child_to_parent[2]; // 자식->부모 : 자식이 write, 부모는 read
@@ -37,7 +37,6 @@ typedef struct {
     int room_idx;
     int mem_cnt; //현재 참여 중인 member 수
     int is_activated; //사용 중인지
-    pid_t mem_pids[MAX_CLIENT]; //현재 참여 중인 member들의 자식 pid
 
 } RoomInfo;
 
@@ -45,6 +44,7 @@ typedef struct {
 int user_idx; //유저 idx
 ClientInfo users[MAX_CLIENT] = {0}; // ClientInfo 구조체 초기화
 RoomInfo rooms[MAX_ROOM] = {0}; //room 구조체 초기화
+
 
 int find_empty_user_slot(){
     for (int i=0; i<MAX_CLIENT; i++){
@@ -65,6 +65,16 @@ int find_user_idx_by_nickname(const char *nickname){
         if (users[i].is_activated && strcmp(users[i].nickname, nickname) == 0){
             return i;
         }
+    }
+    return -1;
+}
+
+/* sender_idx로 속해있는 room_idx 찾기*/
+int find_room_idx_by_sender_idx(int sender_idx){
+    for (int i = 0; i < MAX_ROOM; i++){
+        if (users[sender_idx].room_idx != -1 && (users[sender_idx].room_idx == rooms[i].room_idx)){
+            return i;
+        } 
     }
     return -1;
 }
