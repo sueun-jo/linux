@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "protocol.h"
+#include "debug.h"
 
 ParsedCommand parse_command (const char *input) {
     
@@ -20,12 +21,19 @@ ParsedCommand parse_command (const char *input) {
     char arg1[32] = {0};
     char arg2[1024] = {0};
     
-    int matched = sscanf(input, "/%s %s %s", cmd, arg1, arg2);
+    int matched = sscanf(input, "/%s %s", cmd, arg1);
+    char *start = strstr(input, arg1); //arg1(target)이 시작하는 위치
+    if (!start) return result; 
+    
+    start += strlen(arg1); //arg1만큼 다음칸으로 감
+    while (*start == ' ') start++; //공백이면 한 칸 더 감
 
-    if (strcmp(cmd, "whisper") == 0 && matched >= 3) {
+    if ( (strcmp(cmd, "whisper") == 0 || strcmp(cmd, "w") == 0) && matched >= 2) {
+        dprint("cmd: %s, target: %s, msg: %s\n", cmd, arg1, arg2);
         result.type = CMD_WHISPER;
         strncpy(result.target, arg1, MAX_NAME_LEN - 1);
-        strncpy(result.msg, arg2, MAX_MSG_LEN - 1);
+        strncpy(result.msg, start, MAX_MSG_LEN - 1); //start 메시지 시작 지점
+        dprint("parsing result : %s / %s / %s / matched:%d\n",cmd, arg1, arg2, matched);
     } else if (strcmp(cmd, "add") == 0 && matched >= 2) {
         result.type = CMD_ADD; 
         strncpy(result.target, arg1, MAX_NAME_LEN - 1);

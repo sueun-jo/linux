@@ -59,11 +59,11 @@ int main (int argc, char **argv){
     }
 
     /* socket 생성 */
-    if ( (my_socket = socket(AF_INET, SOCK_STREAM, 0)) < 0 ) {
+    if ((my_socket = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
         perror ("socket error : ");
         return 1;
     }
-    dprint("my_socket is established\n");
+    dprint("my socket is established\n");
     
     /* 서버 주소 생성 */
     memset (&server_addr, 0, sizeof(server_addr));
@@ -100,6 +100,7 @@ int main (int argc, char **argv){
             nickname[x - 1] = '\0';
             write (client_pipe[1], nickname, strlen(nickname));
             kill (getppid(), SIGUSR1); //부모한테 signal 보냄
+            printf("Welcome, %s! You're ready to chat.\n", nickname);
             break; //빠져나옴
         }
 

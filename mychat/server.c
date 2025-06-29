@@ -65,7 +65,6 @@ void sig_usr1(int signo, siginfo_t *info, void *context) {
         /* *************************** */
 
         ParsedCommand cmd = parse_command(buf); //parse_command : cmd 종류 나누기
-        dprint("parsed command : ");
         execute_command(sender_idx, cmd);
     } 
 }
@@ -278,7 +277,27 @@ void handle_join(int sender_idx, const char *room, const char *msg){
 void handle_leave(int sender_idx){
     dprint("not implemented yet\n");
 }
-void handle_add(int sender_idx, const char *room){
+void handle_add(int sender_idx, const char *room_name){
+    /* 방 이름 중복 검사 */
+    for (int i = 0; i< MAX_ROOM; i++){
+        if (rooms[i].is_activated && strcmp (rooms[i].room_name, room_name)){
+            char add_err[] = "[ERR] Room Already Exists.\n";
+            write (users[sender_idx].from_parent_to_child[PIPE_WRITE], add_err, strlen(add_err));
+            kill (users[sender_idx].pid, SIGUSR2);
+            return;
+        }
+    }
+
+    /* 빈 방 찾기 */
+    for (int i = 0; i < MAX_ROOM; i++){
+        if (rooms[i].is_activated == 0){ //활성화 안돼있으면
+            /* 방 정보 등록 : rooms setter*/
+            strncpy(rooms[i].room_name, room_name, sizeof(rooms[i].room_name)-1 );
+            rooms[i].room_idx = i;
+            rooms[i].mem_cnt = 0; // join 할 때 cnt++;
+
+        }
+    }
     dprint("not implemented yet\n");
 }
 void handle_rm(int sender_idx, const char *room){

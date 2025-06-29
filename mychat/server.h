@@ -34,9 +34,11 @@ typedef struct {
 /* 방 정보 구조체 */
 typedef struct {
     char room_name [64];
-    int room_number; // 방 number
+    int room_idx;
     int mem_cnt; //현재 참여 중인 member 수
-    pid_t mem_pids[MAX_CLIENT]; //현재 참여 중인 member들의 자식 pid 
+    int is_activated; //사용 중인지
+    pid_t mem_pids[MAX_CLIENT]; //현재 참여 중인 member들의 자식 pid
+
 } RoomInfo;
 
 
