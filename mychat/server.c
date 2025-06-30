@@ -57,9 +57,20 @@ void sig_usr1(int signo, siginfo_t *info, void *context) {
 
         /* 첫 수신 메시지는 닉네임으로 처리 */
         if (users[sender_idx].nickname[0] == '\0'){
+            /*중복 확인 로직 시작*/
+        for (int i = 0; i < MAX_CLIENT; i++){
+            if (i != sender_idx && users[i].is_activated && strcmp(users[i].nickname, buf)==0){
+                dprint("닉네임 중복\n");
+                char reject_msg[] = "[Info] This nickname is already exists. Plz enter a different one.\n";
+                write (users[sender_idx].from_parent_to_child[PIPE_WRITE], reject_msg, strlen(reject_msg));
+                kill(users[sender_idx].pid, SIGUSR2);
+                return;
+            }
+        }
         dprint("nickname set : nickname [%s]\n", buf);
         strncpy(users[sender_idx].nickname, buf, MAX_NAME_LEN -1);
         dprint("user[%d].nickname is %s\n", sender_idx, users[sender_idx].nickname);
+        
         return;
         }
         /* *************************** */
@@ -270,7 +281,7 @@ void handle_whisper(int sender_idx, const char *target, const char *msg){
     char whisper_msg[BUFSIZE];
     memset(whisper_msg, 0, BUFSIZE);
     snprintf(whisper_msg, BUFSIZE, "[%s님의귓속말]: %s\n", users[sender_idx].nickname, msg);
-    dprint("[%s 님의귓속말]: %s\n", users[sender_idx].nickname, msg);
+    dprint("[%s님의귓속말]: %s\n", users[sender_idx].nickname, msg);
     write (users[recv_idx].from_parent_to_child[PIPE_WRITE], whisper_msg, strlen(whisper_msg));
     kill(users[recv_idx].pid, SIGUSR2);
     return;
@@ -307,7 +318,7 @@ void handle_add(int sender_idx, const char *room_name){
     
     /* 방 이름 중복 검사 */
     for (int i = 0; i< MAX_ROOM; i++){
-        if (rooms[i].is_activated && strcmp (rooms[i].room_name, room_name)){
+        if (rooms[i].is_activated && (strcmp (rooms[i].room_name, room_name) == 0)){
             char add_err[] = "[ERR] Room Already Exists.\n";
             write (users[sender_idx].from_parent_to_child[PIPE_WRITE], add_err, strlen(add_err));
             kill (users[sender_idx].pid, SIGUSR2);
@@ -337,7 +348,7 @@ void handle_add(int sender_idx, const char *room_name){
 /* 방을 remove하는 /rm [방이름] 함수 */
 void handle_rm(int sender_idx, const char *room_name){
     for (int i = 0; i < MAX_ROOM; i++){
-        if (strcmp (rooms[i].room_name, room_name) && rooms[i].is_activated){
+        if (strcmp (rooms[i].room_name, room_name) == 0 && rooms[i].is_activated){
 
             int removed_room_idx = i;
 
@@ -366,20 +377,43 @@ void handle_rm(int sender_idx, const char *room_name){
     return;
 }
 
+/* 방 목록 보여주는 handle_list */
 void handle_list(int sender_idx){
+    char list_msg[BUFSIZE];
+    memset (list_msg, 0, BUFSIZE);
+    int found = 0;
+    strncat (list_msg, "[Room List]\n", BUFSIZE - strlen(list_msg) - 1);
+
     for (int i = 0; i < MAX_ROOM; i++){
         if (rooms[i].is_activated == 1)
             {
+                strncat(list_msg, "- ", BUFSIZE - strlen(list_msg) -1);
+                strncat(list_msg, rooms[i].room_name, BUFSIZE - strlen(list_msg) -1);
+                strncat(list_msg, "\n", BUFSIZE - strlen(list_msg) -1);
                 
-            }//client에 is activated 방 제목들 보여줘야함, strncat 함수 사용 예정
+                found = 1;
+            }
     }
+    
+    if (!found){
+        strncat(list_msg, "No active rooms.\n", BUFSIZE - strlen(list_msg) -1);
+    }
+
+    write (users[sender_idx].from_parent_to_child[PIPE_WRITE], list_msg, strlen(list_msg));
+    kill (users[sender_idx].pid, SIGUSR2);
     return;
 }
 
 /* 해당 방에 있는 모든 사용자 목록 보여주는 /users 함수 */
 void handle_users(int sender_idx){
-    int which_room = find_room_idx_by_sender_idx(sender_idx);
-    dprint("not implemented yet\n");
+    dprint("현재 방에 있는 users를 보여줍니다\n");
+    int now_room = find_room_idx_by_sender_idx(sender_idx);
+    for (int i = 0; i < MAX_CLIENT; i++){
+        if (users[i].is_activated && (users[i].room_idx == now_room)){
+        
+        }
+    }
+
 }
 
 void handle_unknown(int sender_idx){

@@ -37,7 +37,6 @@ typedef struct {
     int room_idx;
     int mem_cnt; //현재 참여 중인 member 수
     int is_activated; //사용 중인지
-
 } RoomInfo;
 
 

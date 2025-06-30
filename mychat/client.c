@@ -98,6 +98,12 @@ int main (int argc, char **argv){
             fgets(nickname, MAX_NAME_LEN, stdin); //닉네임 입력받음
             int x = strlen(nickname);
             nickname[x - 1] = '\0';
+            
+            if (strchr(nickname, ' ') != NULL ){
+                printf("Cannot include ' '(blank) in your nickname\n");
+                continue;
+            }
+
             write (client_pipe[1], nickname, strlen(nickname));
             kill (getppid(), SIGUSR1); //부모한테 signal 보냄
             printf("Welcome, %s! You're ready to chat.\n", nickname);
