@@ -108,7 +108,7 @@ int main()
   }
 
   while (1) {
-    int ret = read(fd, buffer, fmt.fmt.pix.sizeimage);
+    int ret = read(fd, buffer, fmt.fmt.pix.sizeimage); // 과제 : read한 부분 클라로 보내기
     if (ret == -1) {
       perror("Failed to read frame");
       break;
@@ -116,7 +116,7 @@ int main()
 
     // buffer에 읽어온 프레임 데이터를 처리
     printf("Captured frame size: %d bytes\n", ret);
-    display_frame(fbp, buffer, WIDTH, HEIGHT);
+    display_frame(fbp, buffer, WIDTH, HEIGHT); // 과제 : 클라이언트에서 프레임 데이터 보여주기
   }
 
   free(buffer);
