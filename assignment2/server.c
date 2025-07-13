@@ -20,6 +20,7 @@
 #define SERVER_PORT 54321 // server port num
 #define MAX_CLIENT 2
 
+/* YUYV 방식에서 반드시 0~255값이 나오는 것이 아니기에 0~255로 보정작업 필요 */
 #define CLAMP(x) ((x)<0?0:((x)>255?255:(x)))
 
 int client_socket;
@@ -46,7 +47,8 @@ void display_frame(uint16_t *fbp, uint8_t *data, int width, int height)
       int R2 = Y2 + 1.402 * (V - 128);
       int G2 = Y2 - 0.344136 * (U - 128) - 0.714136 * (V - 128);
       int B2 = Y2 + 1.772 * (U - 128);
-
+    
+      /* RGB565 변경한 값 0~255로 보정작업*/
       R1 = CLAMP(R1);
       G1 = CLAMP(G1);
       B1 = CLAMP(B1);
@@ -139,7 +141,7 @@ int main (int argc, char **argv){
                 perror ("Connection closed");
                 goto out; //단순 break로는 루프문 한개밖에 못나감
             }
-            bytes_received += n; // 몇바이트 받았는지
+            bytes_received += n; // 누적 바이트 체크용
             bufp += n; // 포인터 이동
         }
         if (bytes_received == FRAME_SIZE) {
