@@ -22,9 +22,10 @@
 
 #define SERVER_PORT 54321 //server port
 
+/* 클라이언트의 카메라 데이터를 서버 쪽에 보내고 서버는 그걸 framebuffer로 출력 */
 static struct fb_var_screeninfo vinfo;
 
-/* server쪽으로 넘겨줌
+/* server쪽으로 넘겨줌 //display_frame()
 static struct fb_var_screeninfo vinfo;
 
 void display_frame(uint16_t *fbp, uint8_t *data, int width, int height) 
@@ -124,55 +125,34 @@ int main (int argc, char **argv){
     }
     */
 
-    char *buffer = malloc(fmt.fmt.pix.sizeimage);
+    // buffer 동적 할당 및 실패 시 처리
+    unsigned char *buffer = malloc(fmt.fmt.pix.sizeimage);
     if (!buffer) {
         perror("Failed to allocate buffer");
         close(cam_fd);
         return 1;
     }
     
-    /* 서버쪽으로 넘김
-    
-    int fb_fd = open(FRAMEBUFFER_DEVICE, O_RDWR);
-    if (fb_fd == -1) {
-        perror("Error opening framebuffer device");
-        exit(1);
-    }
-
-    if (ioctl(fb_fd, FBIOGET_VSCREENINFO, &vinfo)) {
-        perror("Error reading variable information");
-        close(fb_fd);
-        exit(1);
-    }
-
-    uint32_t fb_width = vinfo.xres;
-    uint32_t fb_height = vinfo.yres;
-    uint32_t screensize = fb_width * fb_height * vinfo.bits_per_pixel / 8;
-    uint16_t *fbp = mmap(0, screensize, PROT_READ | PROT_WRITE, MAP_SHARED, fb_fd, 0);
-    
-    if ((intptr_t)fbp == -1) {
-        perror("Error mapping framebuffer device to memory");
-        close(fb_fd);
-        exit(1);
-    }
-
-    */
 
     while (1) {
-        int ret = read(cam_fd, buffer, fmt.fmt.pix.sizeimage); // 과제 : read한 부분 서버로 보내기
-        if (ret == -1) {
+        int bytes_read = read(cam_fd, buffer, fmt.fmt.pix.sizeimage); // 과제 : read한 부분 서버로 보내기
+        if (bytes_read == -1) {
         perror("Failed to read frame");
         break;
         }
 
         // buffer에 읽어온 프레임 데이터를 처리
-        printf("Captured frame size: %d bytes\n", ret);
-        display_frame(fbp, buffer, WIDTH, HEIGHT); // 과제 : 서버에서 프레임 데이터 보여주기
+        printf("Captured frame size: %d bytes\n", bytes_read);
+        int send_data = send(my_socket, buffer, bytes_read, 0);
+        if (send_data == -1){
+            perror("Failed to send frame");
+            break;
+        }
+
     }
 
     free(buffer);
     close(cam_fd);
-
     close (my_socket);
     return 0;
 }

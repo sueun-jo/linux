@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <string.h>
 #include <unistd.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
@@ -15,9 +16,11 @@
 #define FRAMEBUFFER_DEVICE  "/dev/fb0"
 #define WIDTH               640
 #define HEIGHT              480
-
+#define FRAME_SIZE          (WIDTH * HEIGHT * 2)
 #define SERVER_PORT 54321 // server port num
-#define MAX_CLIENT 5
+#define MAX_CLIENT 2
+
+#define CLAMP(x) ((x)<0?0:((x)>255?255:(x)))
 
 int client_socket;
 
@@ -43,6 +46,13 @@ void display_frame(uint16_t *fbp, uint8_t *data, int width, int height)
       int R2 = Y2 + 1.402 * (V - 128);
       int G2 = Y2 - 0.344136 * (U - 128) - 0.714136 * (V - 128);
       int B2 = Y2 + 1.772 * (U - 128);
+
+      R1 = CLAMP(R1);
+      G1 = CLAMP(G1);
+      B1 = CLAMP(B1);
+      R2 = CLAMP(R2);
+      G2 = CLAMP(G2);
+      B2 = CLAMP(B2);
 
       // RGB565 포맷으로 변환 (R: 5비트, G: 6비트, B: 5비트)
       uint16_t pixel1 = ((R1 & 0xF8) << 8) | ((G1 & 0xFC) << 3) | (B1 >> 3);
@@ -88,7 +98,7 @@ int main (int argc, char **argv){
     if (client_socket < 0)
         perror ("accept error");
 
-    /* server쪽 framebuffer에 그려야 되니까 server쪽에서 열어야 됨 */
+    /* server쪽 framebuffer에 그려야 되니까 framebuffer_fd는 erver쪽에서 열어야 됨 */
     int fb_fd = open(FRAMEBUFFER_DEVICE, O_RDWR);
     if (fb_fd == -1) {
         perror("Error opening framebuffer device");
@@ -113,7 +123,33 @@ int main (int argc, char **argv){
     }
     /* ---------------------------------------------- */
 
+    unsigned char *buffer = malloc(FRAME_SIZE);
+    
+    while (1) {
+        int bytes_received = 0;
+        unsigned char *bufp = buffer;
 
+        while (bytes_received < FRAME_SIZE) {
+            int n = recv(client_socket, bufp, FRAME_SIZE - bytes_received, 0);
+            if (n < 0) { // recv한 값이 음수면 오류
+                
+                perror("Failed to recv");
+                break;
+            } else if (n==0){ // recv한 값이 0이면 connection 종료
+                perror ("Connection closed");
+                goto out; //단순 break로는 루프문 한개밖에 못나감
+            }
+            bytes_received += n; // 몇바이트 받았는지
+            bufp += n; // 포인터 이동
+        }
+        if (bytes_received == FRAME_SIZE) {
+            // 모든 데이터 제대로 받음
+            display_frame(fbp, buffer, WIDTH, HEIGHT);
+        }
+    }
+    out: //나가면 buffer 정리 및 소켓 닫아줌
+    free(buffer);
+    close (fb_fd);
     close (client_socket);
     return 0;
 
