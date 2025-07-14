@@ -20,7 +20,8 @@
 #define SERVER_PORT 54321 // server port num
 #define MAX_CLIENT 2
 
-/* YUYV 방식에서 반드시 0~255값이 나오는 것이 아니기에 0~255로 보정작업 필요 */
+/* YUYV 방식에서 반드시 0~255값이 나오는 것이 아니기에 0~255로 보정작업 필요
+0보다 작은 값은 0으로, 255보다 큰 값은 255로 맞춘다 */
 #define CLAMP(x) ((x)<0?0:((x)>255?255:(x)))
 
 int client_socket;
@@ -48,7 +49,7 @@ void display_frame(uint16_t *fbp, uint8_t *data, int width, int height)
       int G2 = Y2 - 0.344136 * (U - 128) - 0.714136 * (V - 128);
       int B2 = Y2 + 1.772 * (U - 128);
     
-      /* RGB565 변경한 값 0~255로 보정작업*/
+      /* RGB565 변경한 값을 0~255 사이 값으로 보정작업*/
       R1 = CLAMP(R1);
       G1 = CLAMP(G1);
       B1 = CLAMP(B1);
@@ -83,6 +84,7 @@ int main (int argc, char **argv){
     server_addr.sin_family = AF_INET;
     server_addr.sin_port = htons(SERVER_PORT);
     server_addr.sin_addr.s_addr = INADDR_ANY;
+    // INADDR_ANY는 ifconfig 했을 때 나오는 모든 ip로부터의 접속을 허용한다
 
     /* bind로 주소 설정 */
     if (bind (listen_socket, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
@@ -107,6 +109,7 @@ int main (int argc, char **argv){
         exit(1);
     }
 
+    /* fb_fd를 통해서 vinfo값을 가져옴 */
     if (ioctl(fb_fd, FBIOGET_VSCREENINFO, &vinfo)) {
         perror("Error reading variable information");
         close(fb_fd);
@@ -117,6 +120,7 @@ int main (int argc, char **argv){
     uint32_t fb_height = vinfo.yres;
     uint32_t screensize = fb_width * fb_height * vinfo.bits_per_pixel / 8;
     uint16_t *fbp = mmap(0, screensize, PROT_READ | PROT_WRITE, MAP_SHARED, fb_fd, 0);
+    
     
     if ((intptr_t)fbp == -1) {
         perror("Error mapping framebuffer device to memory");
@@ -134,7 +138,6 @@ int main (int argc, char **argv){
         while (bytes_received < FRAME_SIZE) {
             int n = recv(client_socket, bufp, FRAME_SIZE - bytes_received, 0);
             if (n < 0) { // recv한 값이 음수면 오류
-                
                 perror("Failed to recv");
                 break;
             } else if (n==0){ // recv한 값이 0이면 connection 종료
