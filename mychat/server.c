@@ -74,7 +74,7 @@ void sig_usr1(int signo, siginfo_t *info, void *context) {
                 return;
             }
         }
-        dprint("nickname set : nickname [%s]\n", buf);
+        dprint("Nickname set : nickname [%s]\n", buf);
         strncpy(users[sender_idx].nickname, buf, MAX_NAME_LEN -1);
         dprint("user[%d].nickname is %s\n", sender_idx, users[sender_idx].nickname);
         
@@ -124,9 +124,9 @@ int main (int argc, char **argv){
         return -1;
     }
 
+    // server 종료 시에도 port 잠깐 갖고 있는 것 해결하기 위해서 넣었습니다
     int opt = 1;
     setsockopt(listen_socket, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
-    setsockopt(listen_socket, SOL_SOCKET, SO_REUSEPORT, &opt, sizeof(opt));
 
     memset(&server_addr, 0, sizeof(server_addr));
     server_addr.sin_family = AF_INET;
@@ -201,6 +201,7 @@ int main (int argc, char **argv){
             sigemptyset(&sa.sa_mask);
             sigaction(SIGUSR1, &sa, NULL);
 
+            //signal 등록
             signal (SIGCHLD, sig_child); 
             
             close (from_parent_to_child[PIPE_READ]); //부모는 자식한테 write, read필요 없음
@@ -260,6 +261,9 @@ void execute_command(int sender_idx, ParsedCommand cmd){
             break;
         case CMD_QUIT:
             handle_quit(sender_idx);
+            break;
+        case CMD_HELP:
+            handle_help(sender_idx);
             break;
         default: CMD_UNKNOWN;
             handle_unknown(sender_idx);
@@ -494,14 +498,25 @@ void handle_quit(int sender_idx){
     users[sender_idx].is_activated = -1;
     users[sender_idx].room_idx = -1;
     
-
     if (users[sender_idx].pid > 0){
         kill (users[sender_idx].pid, SIGTERM); // 자식 서버 프로세스 종료 요청
     }
-
-    
-    //이부분 뭐 들어가야되나요, 자식 서버 프로세스한테 너랑 지금 연결된 클라이언트 죽어도 된다고 얘기해주고 싶은데
 }
+
+void handle_help(int sender_idx){
+    extern const char* commandStr[];
+    extern const char* commandMan[];
+    
+    char help_msg[BUFSIZE];
+    memset(help_msg, 0, BUFSIZE);
+
+    for (int i=1; i<NUM_CMD; i++){
+        snprintf(help_msg, sizeof(help_msg), "%-12s : %s\n", commandStr[i], commandMan[i]);
+        write (users[sender_idx].from_parent_to_child[PIPE_WRITE], help_msg, strlen(help_msg));
+        kill (users[sender_idx].pid, SIGUSR2);
+    }
+}
+
 void handle_unknown(int sender_idx){
     char unknown_msg[] = "[Err] Wrong Command\n";
     dprint("unknown cmd\n");
@@ -509,3 +524,5 @@ void handle_unknown(int sender_idx){
     kill(users[sender_idx].pid, SIGUSR2);
     return;
 }
+
+

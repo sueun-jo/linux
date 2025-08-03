@@ -53,8 +53,39 @@ ParsedCommand parse_command (const char *input) {
         result.type = CMD_WHERE;
     } else if (strcmp(cmd, "quit") == 0){
         result.type = CMD_QUIT;
+    } else if (strcmp (cmd, "help") == 0){
+        dprint("cmd: %s\n", cmd);
+        result.type = CMD_HELP;
     } else {
         result.type = CMD_UNKNOWN;
     }
     return result;
 }
+
+const char* commandStr[] = {
+    "UNKNOWN",
+    "/w or /whisper",
+    "/add",
+    "/join",
+    "/leave",
+    "/rm",
+    "/list",
+    "/users",
+    "/where",
+    "/quit",
+    "/help"
+};
+
+const char* commandMan[] = {
+    "Unknown command",
+    "Send a private message",
+    "Add a new user",
+    "Join a chat room",
+    "Leave the current room",
+    "Remove a user",
+    "List all chat rooms",
+    "Show all users in the room you are in",
+    "Show where I am",
+    "Quit the chat",
+    "Show help message"
+};

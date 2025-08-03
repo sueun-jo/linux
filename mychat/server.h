@@ -91,5 +91,6 @@ void handle_users(int sender_idx);
 void handle_unknown(int sender_idx);
 void handle_where(int sender_idx);
 void handle_quit(int sender_idx);
+void handle_help(int sendeR_idx);
 
 #endif
