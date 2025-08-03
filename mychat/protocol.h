@@ -19,8 +19,10 @@ typedef enum {
     CMD_LEAVE,       //4
     CMD_RM,          //5
     CMD_LIST,        //6
-    CMD_USERS        //7
-
+    CMD_USERS,       //7
+    CMD_WHERE,       //8
+    CMD_QUIT         //9
+    
 } Command;
 
 typedef struct {

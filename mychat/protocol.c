@@ -49,6 +49,10 @@ ParsedCommand parse_command (const char *input) {
         result.type = CMD_LIST;
     } else if (strcmp(cmd, "users") == 0) {
         result.type = CMD_USERS;
+    } else if (strcmp(cmd, "where") == 0){
+        result.type = CMD_WHERE;
+    } else if (strcmp(cmd, "quit") == 0){
+        result.type = CMD_QUIT;
     } else {
         result.type = CMD_UNKNOWN;
     }

@@ -28,7 +28,7 @@ typedef struct {
     int from_parent_to_child[2]; // 부모->자식 : 부모는 write, 자식은 read
     int from_child_to_parent[2]; // 자식->부모 : 자식이 write, 부모는 read
     int client_socket_fd; // client socket fd : child mainly uses
-    int is_activated; // 1이면 사용 중
+    int is_activated; // 1이면 user 존재
 } ClientInfo;
 
 /* 방 정보 구조체 */
@@ -78,16 +78,18 @@ int find_room_idx_by_sender_idx(int sender_idx){
     return -1;
 }
 
+
 void execute_command(int sender_idx, ParsedCommand cmd);
 void handle_broadcast(int sender_idx, const char *msg);
 void handle_whisper(int sender_idx, const char *target, const char *msg);
-void handle_join(int sender_idx, const char *room, const char *msg);
+void handle_join(int sender_idx, const char *room);
 void handle_leave(int sender_idx);
 void handle_add(int sender_idx, const char *room);
 void handle_rm(int sender_idx, const char *room);
 void handle_list(int sender_idx);
 void handle_users(int sender_idx);
 void handle_unknown(int sender_idx);
-
+void handle_where(int sender_idx);
+void handle_quit(int sender_idx);
 
 #endif

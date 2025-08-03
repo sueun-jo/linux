@@ -2,7 +2,7 @@
 #define __DEBUG_H__
 
 #ifndef DEBUG
-#define DEBUG (4*1+2)
+#define DEBUG (0)
 #endif // DEBUG
 #if DEBUG==7
     #define vprint(...) printf("[VERB]  : %15s:%-4d : ",__FILE__, __LINE__); printf(__VA_ARGS__)

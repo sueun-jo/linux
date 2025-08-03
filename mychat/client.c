@@ -12,7 +12,7 @@
 #define MAX_CLIENT 24
 #define MAX_NAME_LEN 64
 
-#define SERVER_PORT 5432
+#define SERVER_PORT 54321
 #define BUFSIZE 1024
 
 int my_socket, client_pipe[2];
@@ -141,7 +141,7 @@ int main (int argc, char **argv){
             }
             else { // n>0 읽을 게 있으면
             recv_buf[n] = '\0';
-            printf("[from server]: %s\n", recv_buf);
+            printf("%s\n", recv_buf);
             }
         }
         

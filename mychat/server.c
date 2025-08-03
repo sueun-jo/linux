@@ -15,7 +15,7 @@
 #include "debug.h"
 #include "protocol.h"
 
-#define SERVER_PORT 5432
+#define SERVER_PORT 54321
 #define BUFSIZE 1024
 
 int from_child_to_parent[2];
@@ -34,6 +34,13 @@ void sig_child (){
             dprint("%d번째 cient 해제\n", idx);
         } else {eprint("no child pid %d\n", pid);}
     }
+}
+
+void sigterm_handler(){
+    char msg[] = "Good Bye!\n";
+    send (client_socket, msg, strlen(msg), 0);
+    close (client_socket);
+    exit(0);
 }
 /* sig_usr1 : 부모 server do */
 void sig_usr1(int signo, siginfo_t *info, void *context) { 
@@ -117,12 +124,17 @@ int main (int argc, char **argv){
         return -1;
     }
 
+    int opt = 1;
+    setsockopt(listen_socket, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+    setsockopt(listen_socket, SOL_SOCKET, SO_REUSEPORT, &opt, sizeof(opt));
+
     memset(&server_addr, 0, sizeof(server_addr));
     server_addr.sin_family = AF_INET;
     server_addr.sin_port = htons(SERVER_PORT);
     server_addr.sin_addr.s_addr = INADDR_ANY;
 
     /* bind로 주소 설정 */
+
     if (bind (listen_socket, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
         perror("bind error : ");
         return -1;
@@ -158,6 +170,7 @@ int main (int argc, char **argv){
 
         if (pid == 0){ //자식 프로세스
             signal (SIGUSR2, sig_usr2); // sig_usr2는 자식do
+            signal (SIGTERM, sigterm_handler);
             close (listen_socket); //자식은 listen_socket 필요 없음 : accept은 부모만 한다
     
             //자식은 부모한테 write만 하면 됨, read 필요 없음
@@ -205,7 +218,7 @@ int main (int argc, char **argv){
             printf("[INFO] New Client [# %d] is Connected.\n", user_idx);
             dprint("PID : %d, idx : %d\n", users[user_idx].pid, user_idx);
             
-        } else {
+        } else { //fork error
             perror ("fork error : ");
             close (client_socket);
         }
@@ -215,6 +228,7 @@ int main (int argc, char **argv){
     return 0;
 }
 
+/* cmd 수행 */
 void execute_command(int sender_idx, ParsedCommand cmd){
     switch (cmd.type){
         case CMD_BROADCAST:
@@ -224,7 +238,7 @@ void execute_command(int sender_idx, ParsedCommand cmd){
             handle_whisper(sender_idx, cmd.target, cmd.msg);
             break;
         case CMD_JOIN:
-            handle_join(sender_idx, cmd.target, cmd.msg);
+            handle_join(sender_idx, cmd.target);
             break;
         case CMD_LEAVE:
             handle_leave(sender_idx);
@@ -241,6 +255,12 @@ void execute_command(int sender_idx, ParsedCommand cmd){
         case CMD_USERS:
             handle_users(sender_idx);
             break;
+        case CMD_WHERE:
+            handle_where(sender_idx);
+            break;
+        case CMD_QUIT:
+            handle_quit(sender_idx);
+            break;
         default: CMD_UNKNOWN;
             handle_unknown(sender_idx);
             break;
@@ -250,7 +270,7 @@ void execute_command(int sender_idx, ParsedCommand cmd){
 void handle_broadcast(int sender_idx, const char *msg){
     // broadcast: 나 빼고 모두에게
     for (int i = 0; i < MAX_CLIENT; i++) {
-        if (users[i].is_activated && (i != sender_idx) /* && users[i].room_idx == user[send_idx].room_idx*/) {
+        if (users[i].is_activated && (i != sender_idx) && users[i].room_idx == users[sender_idx].room_idx) {
             char msg_with_nick[BUFSIZE];
             memset(msg_with_nick, 0, BUFSIZE);
             //닉네임이랑 메시지 붙이기
@@ -287,7 +307,7 @@ void handle_whisper(int sender_idx, const char *target, const char *msg){
     return;
 }
 
-void handle_join(int sender_idx, const char *room_name, const char *msg){
+void handle_join(int sender_idx, const char *room_name){
     /* 방 있는지 확인 */
     for (int i = 0; i< MAX_ROOM; i++){
         if (rooms[i].is_activated && (strcmp (rooms[i].room_name, room_name) == 0)){
@@ -309,10 +329,19 @@ void handle_join(int sender_idx, const char *room_name, const char *msg){
     kill (users[sender_idx].pid, SIGUSR2);
     return;
 }
-void handle_leave(int sender_idx){
 
-    dprint("not implemented yet\n");
+void handle_leave(int sender_idx){
+    dprint("방을 떠납니다!\n");
+
+    // room_idx를 -1로 만들고 로비로 돌아갔다고 알리기
+    rooms[users[sender_idx].room_idx].mem_cnt--; // 해당 방 memcnt 감소
+    users[sender_idx].room_idx = -1;
+    char leave_msg[] = "Back to the lobby.\n";
+    write (users[sender_idx].from_parent_to_child[PIPE_WRITE], leave_msg, strlen(leave_msg));
+    kill (users[sender_idx].pid, SIGUSR2);
+
 }
+
 /*방 추가하는 /add [방이름] 함수*/
 void handle_add(int sender_idx, const char *room_name){
     
@@ -337,7 +366,7 @@ void handle_add(int sender_idx, const char *room_name){
             dprint("방 생성 완료\n");
             char msg[BUFSIZE];
             memset(msg, 0, BUFSIZE);
-            snprintf(msg, BUFSIZE, "room named [%s] is created.\n", rooms[i].room_name);
+            snprintf(msg, BUFSIZE, "Room named [%s] is created.\n", rooms[i].room_name);
             write(users[sender_idx].from_parent_to_child[PIPE_WRITE], msg, strlen(msg));
             kill(users[sender_idx].pid, SIGUSR2);
             return;
@@ -396,7 +425,7 @@ void handle_list(int sender_idx){
     }
     
     if (!found){
-        strncat(list_msg, "No active rooms.\n", BUFSIZE - strlen(list_msg) -1);
+        strncat(list_msg, "No active rooms!\n", BUFSIZE - strlen(list_msg) -1);
     }
 
     write (users[sender_idx].from_parent_to_child[PIPE_WRITE], list_msg, strlen(list_msg));
@@ -407,15 +436,72 @@ void handle_list(int sender_idx){
 /* 해당 방에 있는 모든 사용자 목록 보여주는 /users 함수 */
 void handle_users(int sender_idx){
     dprint("현재 방에 있는 users를 보여줍니다\n");
+    
+    char user_list_msg[BUFSIZE];
+    memset (user_list_msg, 0, BUFSIZE);
+    int found;
+    strncat (user_list_msg, "[User List]\n", BUFSIZE - strlen(user_list_msg) - 1);
+
     int now_room = find_room_idx_by_sender_idx(sender_idx);
     for (int i = 0; i < MAX_CLIENT; i++){
         if (users[i].is_activated && (users[i].room_idx == now_room)){
-        
+            strncat(user_list_msg, "- ", BUFSIZE - strlen(user_list_msg)-1);
+            strncat(user_list_msg, users[i].nickname, BUFSIZE - strlen(user_list_msg)-1 );
+            strncat(user_list_msg, "\n", BUFSIZE-strlen(user_list_msg)-1 );
+            found = 1;
         }
     }
 
+    if (!found){
+        strncat(user_list_msg, "No Users in this room!\n", BUFSIZE -strlen(user_list_msg) -1);
+    }
+
+    write (users[sender_idx].from_parent_to_child[PIPE_WRITE], user_list_msg, strlen(user_list_msg));
+    kill (users[sender_idx].pid, SIGUSR2);
 }
 
+void handle_where(int sender_idx){ 
+    dprint("현재 나는 무슨 방에 있나요?\n");
+    int my_room_idx = find_room_idx_by_sender_idx(sender_idx);
+    char where_msg[BUFSIZE];
+    memset(where_msg, 0, BUFSIZE);
+
+    if (my_room_idx==-1) {
+        strncat(where_msg, "No Room You In, You're in Lobby!\n", BUFSIZE - strlen(where_msg) -1 );
+        write (users[sender_idx].from_parent_to_child[PIPE_WRITE], where_msg, strlen(where_msg));
+        kill (users[sender_idx].pid, SIGUSR2);
+
+    } else {
+        // printf("Room Name: %s\n", rooms[my_room_idx].room_name);
+        strncat(where_msg, "You're in the room named: ", BUFSIZE-strlen(where_msg)-1);
+        strncat(where_msg, rooms[my_room_idx].room_name, BUFSIZE-strlen(where_msg)-1);
+        strncat(where_msg, "\n", BUFSIZE-strlen(where_msg)-1);
+
+        write (users[sender_idx].from_parent_to_child[PIPE_WRITE], where_msg, strlen(where_msg));
+        kill (users[sender_idx].pid, SIGUSR2);
+    }
+}
+
+void handle_quit(int sender_idx){
+    printf("User [%s] input '/quit'!\n", users[sender_idx].nickname);
+    int room_idx = users[sender_idx].room_idx;
+    if (room_idx > 0 && rooms[room_idx].is_activated){
+        rooms[room_idx].mem_cnt--; //방에 있으면 멤버 감소
+    }
+    
+    close(users[sender_idx].client_socket_fd);
+    users[sender_idx].client_socket_fd = -1;
+    users[sender_idx].is_activated = -1;
+    users[sender_idx].room_idx = -1;
+    
+
+    if (users[sender_idx].pid > 0){
+        kill (users[sender_idx].pid, SIGTERM); // 자식 서버 프로세스 종료 요청
+    }
+
+    
+    //이부분 뭐 들어가야되나요, 자식 서버 프로세스한테 너랑 지금 연결된 클라이언트 죽어도 된다고 얘기해주고 싶은데
+}
 void handle_unknown(int sender_idx){
     char unknown_msg[] = "[Err] Wrong Command\n";
     dprint("unknown cmd\n");
